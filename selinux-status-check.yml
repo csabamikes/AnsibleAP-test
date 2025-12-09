@@ -1,0 +1,15 @@
+---
+- name: Check SELinux status on RHEL hosts
+  hosts: all
+  remote_user: ansible
+  become: true
+  tasks:
+    - name: Gather SELinux status
+      command: getenforce
+      register: selinux_status
+      ignore_errors: yes  # Ignore errors if SELinux is not installed or accessible
+
+    - name: Display SELinux status
+      debug:
+        msg: "SELinux status is: {{ selinux_status.stdout }}"
+      when: selinux_status is defined
