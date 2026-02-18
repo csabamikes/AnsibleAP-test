@@ -17,8 +17,6 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
     prefix: bld_
   - key: d42_os_family
     prefix: os_
-  - key: d42_ip_addresses
-    prefix: address_
   - key: "d42_ip_addresses | selectattr('key', 'equalto', 'ip') | map(attribute='value') | list"
     prefix: 'mcs'
     separator: ''
