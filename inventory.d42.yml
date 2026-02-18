@@ -17,6 +17,8 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
     prefix: bld_
   - key: d42_os_family
     prefix: os_
+  - key: d42_ip_addresses
+    prefix: address_
 
 compose:  # Ansible változókat állíthatsz be Device42 adatokból (opcionális)
   ansible_host: d42_name
