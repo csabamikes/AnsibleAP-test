@@ -19,7 +19,7 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
     prefix: os_
   - key: d42_ip_addresses
     prefix: address_
-  - key: "ip_addresses | selectattr('key', 'equalto', 'ip') | map(attribute='value') | list"
+  - key: "d42_ip_addresses | selectattr('key', 'equalto', 'ip') | map(attribute='value') | list"
     prefix: 'mcs'
     separator: ''
     
