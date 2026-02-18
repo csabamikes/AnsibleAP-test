@@ -19,6 +19,7 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
     prefix: os_
   - key: "d42_ip_addresses | map(attribute='ip') | list"
     prefix: ip
+    separator: ''
 
     
 
