@@ -23,8 +23,8 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
  #- key: d42_ip_addresses | map(attribute='ip') | map('replace', '.', '-') | list
    #prefix: "ip"
    #separator: " "
-  - key: d42_ip_addresses | map('json_query', 'join(`type`, [ip, type])') | list
-    prefix: "net"
+  - key: d42_ip_addresses | map('json_query', 'join(`_type_`, [ip, type])') | list
+    prefix: "d42"
     separator: "_"
     
 
