@@ -17,7 +17,7 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
     prefix: bld_
   - key: d42_os_family
     prefix: os_
- - key: "d42_ip_addresses | map(attribute='ip') | list"
+  - key: "d42_ip_addresses | map(attribute='ip') | list"
     prefix: ip
     separator: ''
   #- key: d42_ip_addresses | map(attribute='ip') | map('replace', '.', '-') | list
