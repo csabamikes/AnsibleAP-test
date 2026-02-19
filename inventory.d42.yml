@@ -17,15 +17,15 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
     prefix: bld_
   - key: d42_os_family
     prefix: os_
- #- key: "d42_ip_addresses | map(attribute='ip') | list"
-    #prefix: ip
-    #separator: ''
- #- key: d42_ip_addresses | map(attribute='ip') | map('replace', '.', '-') | list
+ - key: "d42_ip_addresses | map(attribute='ip') | list"
+    prefix: ip
+    separator: ''
+  #- key: d42_ip_addresses | map(attribute='ip') | map('replace', '.', '-') | list
    #prefix: "ip"
    #separator: " "
-  - key: d42_ip_addresses | map('json_query', 'join(`_type_`, [ip, type])') | list
-    prefix: "d42"
-    separator: "_"
+  #- key: d42_ip_addresses | map('json_query', 'join(`_type_`, [ip, type])') | list
+   #prefix: "d42"
+   #separator: "_"
     
 
 
