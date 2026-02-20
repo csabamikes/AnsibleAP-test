@@ -26,12 +26,12 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
 #    separator: ""
 #  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_BENV') | map(attribute='value') | list | first
 #    separator: ""
-#  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_TYPE') | map(attribute='value')
-#    separator: ""
-#  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value')
-#    separator: ""
-#  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_BENV') | map(attribute='value')
-#    separator: ""
+  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_TYPE') | map(attribute='value')
+    separator: ""
+  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value')
+    separator: ""
+  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_BENV') | map(attribute='value')
+    separator: ""
     
 groups:
   # A csoport neve: WEBSERVER_InternetWEB
