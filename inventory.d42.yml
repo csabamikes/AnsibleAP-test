@@ -20,9 +20,8 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
   - key: "d42_ip_addresses | map(attribute='ip') | list"
     prefix: ip
     separator: ' '
-  - key: "d42.custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value') | first"
+  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value') | list | first
     separator: ""
-
     
 
 
