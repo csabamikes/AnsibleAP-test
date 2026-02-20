@@ -26,7 +26,10 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
   #- key: d42_ip_addresses | map('json_query', 'join(`_type_`, [ip, type])') | list
    #prefix: "d42"
    #separator: "_"
-  - key: custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value') | first | default('not_AAP_LNX_APP')
+#  - key: custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value') | first | default('not_AAP_LNX_APP')
+ #   prefix: env_
+ #   separator: ''
+  - key: custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value')
     prefix: env_
     separator: ''
 
