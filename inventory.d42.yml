@@ -4,7 +4,7 @@ debug: false
 clean_device_name: false  # Tisztítja a készülékneveket (opcionális)
 # Csak a Production service levelű gépeket húzza be
 strict: false  # opcionális, ha hibás adat van, ne szakadjon meg
-fetch_custom_fields: true
+#fetch_custom_fields: true
 
 keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
   - key: d42_service_level
@@ -17,9 +17,9 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
     prefix: bld_
   - key: d42_os_family
     prefix: os_
-  - key: "d42_ip_addresses | map(attribute='ip') | list"
-    prefix: ip
-    separator: ' '
+  #- key: "d42_ip_addresses | map(attribute='ip') | list"
+  #  prefix: ip
+  #  separator: ' '
   - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_TYPE') | map(attribute='value') | list | first
     separator: ""
   - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value') | list | first
