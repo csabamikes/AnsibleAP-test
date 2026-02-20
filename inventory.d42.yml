@@ -4,7 +4,7 @@ debug: false
 clean_device_name: false  # Tisztítja a készülékneveket (opcionális)
 # Csak a Production service levelű gépeket húzza be
 strict: false  # opcionális, ha hibás adat van, ne szakadjon meg
-
+fetch_custom_fields: true
 
 keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
   - key: d42_service_level
