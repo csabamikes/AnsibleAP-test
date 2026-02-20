@@ -10,13 +10,13 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
   - key: d42_service_level
     prefix: ''
     separator: ''
-  - key: d42_tags
-    prefix: tag_
-    separator: ''
-  - key: d42_building
-    prefix: bld_
-  - key: d42_os_family
-    prefix: os_
+  #- key: d42_tags
+  #  prefix: tag_
+  #  separator: ''
+  #- key: d42_building
+  #  prefix: bld_
+  #- key: d42_os_family
+  #  prefix: os_
   #- key: "d42_ip_addresses | map(attribute='ip') | list"
   #  prefix: ip
   #  separator: ' '
