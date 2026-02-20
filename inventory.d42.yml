@@ -20,13 +20,18 @@ keyed_groups:  # Csoportosítás Device42 adatok alapján (opcionális)
   #- key: "d42_ip_addresses | map(attribute='ip') | list"
   #  prefix: ip
   #  separator: ' '
-  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_TYPE') | map(attribute='value') | list | first
+#  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_TYPE') | map(attribute='value') | list | first
+#    separator: ""
+#  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value') | list | first
+#    separator: ""
+#  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_BENV') | map(attribute='value') | list | first
+#    separator: ""
+  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_TYPE') | map(attribute='value')
     separator: ""
-  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value') | list | first
+  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_APP') | map(attribute='value')
     separator: ""
-  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_BENV') | map(attribute='value') | list | first
+  - key: d42_custom_fields | selectattr('key', 'equalto', 'AAP_LNX_BENV') | map(attribute='value')
     separator: ""
-    
 
 
 compose:  # Ansible változókat állíthatsz be Device42 adatokból (opcionális)
