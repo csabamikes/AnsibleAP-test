@@ -1,0 +1,38 @@
+- name: Constructed Source konfigurálása keyed_groups szabályokkal
+      infra.controller_configuration.inventory_source:
+        name: "Constructed Source for Apps"
+        inventory: "Dynamic-App-Inventory"
+        source: "constructed"
+        source_vars:
+          input_inventories:
+            - "AWS-Production-Inventory"
+          
+          # KEYED_GROUPS: Automatikus csoportképzés változók alapján
+          keyed_groups:
+            # Csoportosítás a 'region' változó alapján (pl. létrejön: region_eu_central_1)
+            - prefix: region
+              key: placement.region
+            
+            # Csoportosítás AWS tagek alapján (pl. létrejön: tag_Environment_prod)
+            - prefix: tag
+              key: tags
+            
+            # Csoportosítás az OS típusa alapján (pl. létrejön: os_Linux)
+            - prefix: os
+              key: ansible_system
+
+          # GROUPS: Egyedi logikai feltételek
+          groups:
+            critical_infrastructure: "tags.Priority == 'high' and 'web' in inventory_hostname"
+
+          # COMPOSE: Változók dinamikus értékkészítése
+          compose:
+            ansible_user: "'admin' if tags.Environment == 'prod' else 'ec2-user'"
+
+        update_on_launch: true
+        overwrite: true
+        state: present
+        controller_host: "{{ controller_host }}"
+        controller_username: "{{ controller_username }}"
+        controller_password: "{{ controller_password }}"
+        controller_verify_ssl: "{{ controller_verify_ssl }}"
