@@ -1,3 +1,4 @@
+---
 - name: Constructed Source konfigurálása keyed_groups szabályokkal
       infra.controller_configuration.inventory_source:
         name: "Constructed Source for Apps"
