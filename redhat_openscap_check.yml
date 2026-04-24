@@ -1,0 +1,50 @@
+---
+- name: OpenSCAP célzott vizsgálat - SSH Root Login ellenőrzése
+  hosts: all
+  become: yes
+  vars:
+    # A konkrét szabály azonosítója
+    target_rule: "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
+    scap_ds: "/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml"
+    local_report_dir: "./reports/{{ inventory_hostname }}"
+
+  tasks:
+    - name: OpenSCAP és Security Guide telepítése
+      dnf:
+        name:
+          - openscap-scanner
+          - scap-security-guide
+        state: present
+
+    - name: Időbélyeg generálása
+      set_fact:
+        timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M') }}"
+
+    - name: Célzott OpenSCAP vizsgálat futtatása (--rule használatával)
+      command: >
+        oscap xccdf eval 
+        --rule {{ target_rule }}
+        --results /tmp/sshd_results_{{ timestamp }}.xml
+        --report /tmp/sshd_report_{{ timestamp }}.html
+        {{ scap_ds }}
+      register: oscap_result
+      # Az oscap 2-es kódot ad, ha a szabály "Fail" (sikertelen), ezt ne tekintse hibának
+      failed_when: oscap_result.rc not in [0, 2]
+
+    - name: Specifikus jelentés visszamásolása az AAP kontrollerre
+      fetch:
+        src: "/tmp/sshd_report_{{ timestamp }}.html"
+        dest: "{{ local_report_dir }}/"
+        flat: yes
+
+    - name: Ideiglenes fájlok eltávolítása a távoli gépről
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/tmp/sshd_results_{{ timestamp }}.xml"
+        - "/tmp/sshd_report_{{ timestamp }}.html"
+
+    - name: Eredmény megjelenítése az Ansible kimeneten
+      debug:
+        msg: "A vizsgálat lefutott. Eredmény állapota: {{ 'Sikeres (Pass)' if oscap_result.rc == 0 else 'Sikertelen (Fail)' }}"
