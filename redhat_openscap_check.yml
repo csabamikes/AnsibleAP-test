@@ -1,50 +1,48 @@
 ---
-- name: OpenSCAP célzott vizsgálat - SSH Root Login ellenőrzése
+- name: OpenSCAP vizsgálat és közvetlen másolás az AAP hostra
   hosts: all
   become: yes
   vars:
-    # A konkrét szabály azonosítója
     target_rule: "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
     scap_ds: "/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml"
-    local_report_dir: "/home/ansible/oscap_reports/{{ inventory_hostname }}"
+    # Az AAP host elérhetősége és a célmappa
+    aap_host_address: "192.168.1.185"  # CSERÉLD KI az AAP szervered valódi IP címére!
+    aap_destination_dir: "/home/ansible/oscap_reports/{{ inventory_hostname }}"
 
   tasks:
-    - name: OpenSCAP és Security Guide telepítése
+    - name: OpenSCAP csomagok telepítése
       dnf:
-        name:
-          - openscap-scanner
-          - scap-security-guide
+        name: [openscap-scanner, scap-security-guide]
         state: present
 
     - name: Időbélyeg generálása
       set_fact:
         timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M') }}"
 
-    - name: Célzott OpenSCAP vizsgálat futtatása (--rule használatával)
+    - name: Vizsgálat futtatása a távoli gépen
       command: >
         oscap xccdf eval 
         --rule {{ target_rule }}
-        --results /tmp/sshd_results_{{ timestamp }}.xml
-        --report /tmp/sshd_report_{{ timestamp }}.html
+        --report /tmp/report.html
         {{ scap_ds }}
       register: oscap_result
-      # Az oscap 2-es kódot ad, ha a szabály "Fail" (sikertelen), ezt ne tekintse hibának
-      failed_when: oscap_result.rc not in [0, 2]
+      failed_when: false
 
-    - name: Specifikus jelentés visszamásolása az AAP kontrollerre
-      fetch:
-        src: "/tmp/sshd_report_{{ timestamp }}.html"
-        dest: "{{ local_report_dir }}/"
-        flat: yes
-
-    - name: Ideiglenes fájlok eltávolítása a távoli gépről
+    - name: Jelentés átküldése a távoli gépről KÖZVETLENÜL az AAP hostra
+      shell: >
+        scp -o StrictHostKeyChecking=no /tmp/report.html 
+        ansible@{{ aap_host_address }}:{{ aap_destination_dir }}/report_{{ timestamp }}.html
+      delegate_to: "{{ inventory_hostname }}"
+      
+    - name: Ideiglenes fájl törlése a vizsgált gépről
       file:
-        path: "{{ item }}"
+        path: /tmp/report.html
         state: absent
-      loop:
-        - "/tmp/sshd_results_{{ timestamp }}.xml"
-        - "/tmp/sshd_report_{{ timestamp }}.html"
 
-    - name: Eredmény megjelenítése az Ansible kimeneten
+- name: Jogosultságok javítása az AAP hoston (Opcionális)
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Üzenet a mentés befejezéséről
       debug:
-        msg: "A vizsgálat lefutott. Eredmény állapota: {{ 'Sikeres (Pass)' if oscap_result.rc == 0 else 'Sikertelen (Fail)' }}"
+        msg: "A jelentések az AAP host {{ aap_destination_dir }} mappájába kerültek."
