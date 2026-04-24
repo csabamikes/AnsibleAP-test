@@ -1,12 +1,12 @@
 ---
-- name: OpenSCAP vizsgálat és közvetlen másolás az AAP hostra
+- name: OpenSCAP vizsgálat és másolás AAP hostra copy modullal
   hosts: all
   become: yes
   vars:
     target_rule: "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
     scap_ds: "/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml"
-    # Az AAP host elérhetősége és a célmappa
-    aap_host_address: "192.168.1.185"  # CSERÉLD KI az AAP szervered valódi IP címére!
+    # Az AAP fizikai gép címe (vagy DNS neve), ahová menteni szeretnél
+    aap_host_address: "192.168.1.185"
     aap_destination_dir: "/home/ansible/oscap_reports/{{ inventory_hostname }}"
 
   tasks:
@@ -28,21 +28,33 @@
       register: oscap_result
       failed_when: false
 
-    - name: Jelentés átküldése a távoli gépről KÖZVETLENÜL az AAP hostra
-      shell: >
-        scp -o StrictHostKeyChecking=no /tmp/report.html 
-        ansible@{{ aap_host_address }}:{{ aap_destination_dir }}/report_{{ timestamp }}.html
-      delegate_to: "{{ inventory_hostname }}"
-      
+    - name: 1. Lépés - Jelentés áthúzása a távoli gépről az AAP konténerbe
+      fetch:
+        src: /tmp/report.html
+        dest: "/tmp/oscap_sync/{{ inventory_hostname }}/"
+        flat: yes
+
+    - name: 2. Lépés - Célkönyvtár létrehozása az AAP hoston
+      file:
+        path: "{{ aap_destination_dir }}"
+        state: directory
+        mode: '0755'
+        owner: ansible
+      delegate_to: "{{ aap_host_address }}"
+      # Itt az AAP host SSH-n keresztüli eléréséhez szükség lehet a 'become'-ra
+      become: yes
+
+    - name: 3. Lépés - Másolás az AAP konténerből az AAP hostra
+      copy:
+        src: "/tmp/oscap_sync/{{ inventory_hostname }}/report.html"
+        dest: "{{ aap_destination_dir }}/report_{{ timestamp }}.html"
+        owner: ansible
+        group: ansible
+        mode: '0644'
+      delegate_to: "{{ aap_host_address }}"
+      become: yes
+
     - name: Ideiglenes fájl törlése a vizsgált gépről
       file:
         path: /tmp/report.html
         state: absent
-
-- name: Jogosultságok javítása az AAP hoston (Opcionális)
-  hosts: localhost
-  connection: local
-  tasks:
-    - name: Üzenet a mentés befejezéséről
-      debug:
-        msg: "A jelentések az AAP host {{ aap_destination_dir }} mappájába kerültek."
