@@ -6,7 +6,7 @@
     # A konkrét szabály azonosítója
     target_rule: "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
     scap_ds: "/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml"
-    local_report_dir: "./reports/{{ inventory_hostname }}"
+    local_report_dir: "/home/ansible/oscap_reports/{{ inventory_hostname }}"
 
   tasks:
     - name: OpenSCAP és Security Guide telepítése
