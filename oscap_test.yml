@@ -1,12 +1,12 @@
 ---
 - name: OpenSCAP vizsgálat, javítás és XML eredménymentés
-  hosts: all
+  hosts: rhel9-01.example.com
   become: yes
   vars:
     target_rule: "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
     scap_ds: "/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml"
     # Az AAP fizikai gép címe és a célmappa
-    aap_host_address: "10.0.0.10"
+    aap_host_address: "192.168.1.185"
     aap_destination_dir: "/home/ansible/oscap_reports/{{ inventory_hostname }}"
 
   tasks:
