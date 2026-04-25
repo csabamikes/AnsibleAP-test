@@ -25,7 +25,7 @@
         --remediate
         --rule {{ target_rule }}
         --results /tmp/results_{{ inventory_hostname }}.xml
-        --report /tmp/report_{{ inventory_hostname shadow }}.html
+        --report /tmp/report_{{ inventory_hostname }}.html
         {{ scap_ds }}
       register: oscap_result
       failed_when: oscap_result.rc not in [0, 2]
