@@ -1,0 +1,68 @@
+---
+- name: OpenSCAP célzott vizsgálat, javítás és másolás AAP hostra
+  hosts: all
+  become: yes
+  vars:
+    target_rule: "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
+    scap_ds: "/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml"
+    # Az AAP fizikai gép címe
+    aap_host_address: "10.0.0.10"
+    aap_destination_dir: "/home/ansible/oscap_reports/{{ inventory_hostname }}"
+
+  tasks:
+    - name: OpenSCAP csomagok telepítése
+      dnf:
+        name: [openscap-scanner, scap-security-guide]
+        state: present
+
+    - name: Időbélyeg generálása
+      set_fact:
+        timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M') }}"
+
+    - name: Vizsgálat futtatása és AUTOMATIKUS JAVÍTÁS
+      command: >
+        oscap xccdf eval 
+        --remediate
+        --rule {{ target_rule }}
+        --report /tmp/remediated_report.html
+        {{ scap_ds }}
+      register: oscap_result
+      # 0: megfelelt, 2: hiba volt de javítva lett (vagy maradt hiba)
+      failed_when: oscap_result.rc not in [0, 2]
+
+    - name: 1. Lépés - A javítás utáni jelentés áthúzása az AAP konténerbe
+      fetch:
+        src: /tmp/remediated_report.html
+        dest: "/tmp/oscap_sync/{{ inventory_hostname }}/"
+        flat: yes
+
+    - name: 2. Lépés - Célkönyvtár ellenőrzése az AAP hoston
+      file:
+        path: "{{ aap_destination_dir }}"
+        state: directory
+        mode: '0755'
+        owner: ansible
+      delegate_to: "{{ aap_host_address }}"
+      become: yes
+
+    - name: 3. Lépés - Másolás az AAP hostra (copy modul)
+      copy:
+        src: "/tmp/oscap_sync/{{ inventory_hostname }}/remediated_report.html"
+        dest: "{{ aap_destination_dir }}/remediated_report_{{ timestamp }}.html"
+        owner: ansible
+        group: ansible
+        mode: '0644'
+      delegate_to: "{{ aap_host_address }}"
+      become: yes
+
+    - name: Takarítás a távoli gépen
+      file:
+        path: /tmp/remediated_report.html
+        state: absent
+
+    - name: Összegzés a javításról
+      debug:
+        msg: >
+          A vizsgálat és javítás befejeződött. 
+          Ha az eredmény 'Fixed', a rendszer módosult. 
+          Eredmény kód: {{ oscap_result.rc }}
