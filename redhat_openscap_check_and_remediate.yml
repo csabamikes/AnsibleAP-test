@@ -1,6 +1,6 @@
 ---
 - name: OpenSCAP célzott vizsgálat, javítás és másolás AAP hostra
-  hosts: all
+  hosts: rhel9-02.example.com
   become: yes
   vars:
     target_rule: "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
