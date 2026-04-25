@@ -1,5 +1,5 @@
 ---
-- name: OpenSCAP vizsgálat, javítás és XML eredménymentés
+- name: OpenSCAP vizsgálat, XML mentés és Offline Playbook generálás
   hosts: rhel9-01.example.com
   become: yes
   vars:
@@ -10,7 +10,7 @@
     aap_destination_dir: "/home/ansible/oscap_reports/{{ inventory_hostname }}"
 
   tasks:
-    - name: OpenSCAP csomagok telepítése
+    - name: OpenSCAP csomagok telepítése a vizsgált gépen
       dnf:
         name: [openscap-scanner, scap-security-guide]
         state: present
@@ -19,24 +19,17 @@
       set_fact:
         timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M') }}"
 
-    - name: Vizsgálat futtatása, JAVÍTÁS és RESULTS.XML generálása
+    - name: Vizsgálat futtatása és RESULTS.XML generálása
       command: >
         oscap xccdf eval 
-        --remediate
         --rule {{ target_rule }}
         --results /tmp/results_{{ inventory_hostname }}.xml
         --report /tmp/report_{{ inventory_hostname }}.html
         {{ scap_ds }}
       register: oscap_result
-      failed_when: oscap_result.rc not in [0, 2]
+      failed_when: false # Nem akarjuk, hogy leálljon, ha találatot jelez (rc=2)
 
-    - name: SSHD újraindítása, ha módosítás történt (rc=2)
-      service:
-        name: sshd
-        state: restarted
-      when: oscap_result.rc == 2
-
-    - name: 1. Lépés - Fájlok (HTML és XML) áthúzása az AAP konténerbe
+    - name: 1. Lépés - Eredmények áthúzása az AAP konténerbe
       fetch:
         src: "/tmp/{{ item }}_{{ inventory_hostname }}{{ '.xml' if item == 'results' else '.html' }}"
         dest: "/tmp/oscap_sync/{{ inventory_hostname }}/"
@@ -45,7 +38,7 @@
         - results
         - report
 
-    - name: 2. Lépés - Célkönyvtár biztosítása az AAP hoston
+    - name: 2. Lépés - Könyvtár biztosítása az AAP hoston
       file:
         path: "{{ aap_destination_dir }}"
         state: directory
@@ -58,12 +51,18 @@
       copy:
         src: "/tmp/oscap_sync/{{ inventory_hostname }}/{{ item.file }}"
         dest: "{{ aap_destination_dir }}/{{ item.name }}_{{ timestamp }}{{ item.ext }}"
-        owner: ansible
-        group: ansible
-        mode: '0644'
       loop:
         - { name: 'results', file: "results_{{ inventory_hostname }}.xml", ext: '.xml' }
         - { name: 'report', file: "report_{{ inventory_hostname }}.html", ext: '.html' }
+      delegate_to: "{{ aap_host_address }}"
+      become: yes
+
+    - name: 4. Lépés - OFFLINE REMEDIATION PLAYBOOK GENERÁLÁSA az AAP hoston
+      command: >
+        oscap xccdf generate fix --fix-type ansible 
+        --result-id "" 
+        --output {{ aap_destination_dir }}/remediation_{{ timestamp }}.yml 
+        {{ aap_destination_dir }}/results_{{ timestamp }}.xml
       delegate_to: "{{ aap_host_address }}"
       become: yes
 
