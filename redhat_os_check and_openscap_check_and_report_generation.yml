@@ -1,0 +1,74 @@
+---
+- name: OpenSCAP vizsgálat és jelentés központosítása RHEL verziótól függően
+  hosts: all
+  become: yes
+  vars:
+    target_rule: "xccdf_org.ssgproject.content_rule_sshd_disable_root_login"
+    # Az AAP fizikai gép címe
+    aap_host_address: "192.168.1.185"
+    aap_destination_dir: "/home/ansible/oscap_reports/{{ inventory_hostname }}"
+
+  tasks:
+    - name: Operációs rendszer verziójának ellenőrzése és DataStream beállítása
+      set_fact:
+        scap_ds: "/usr/share/xml/scap/ssg/content/ssg-rhel{{ ansible_distribution_major_version }}-ds.xml"
+        pkg_manager: "{{ 'yum' if ansible_distribution_major_version | int == 7 else 'dnf' }}"
+
+    - name: Logolás - verzió és választott fájl
+      debug:
+        msg: "Észlelt RHEL verzió: {{ ansible_distribution_major_version }}. Használt DataStream: {{ scap_ds }}"
+
+    - name: OpenSCAP csomagok telepítése
+      package:
+        name: 
+          - openscap-scanner
+          - scap-security-guide
+        state: present
+      # A 'package' modul automatikusan a megfelelő (yum/dnf) managert fogja használni
+
+    - name: Időbélyeg generálása
+      set_fact:
+        timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M') }}"
+
+    - name: Vizsgálat futtatása a távoli gépen
+      command: >
+        oscap xccdf eval 
+        --rule {{ target_rule }}
+        --report /tmp/report.html
+        {{ scap_ds }}
+      register: oscap_result
+      failed_when: false
+      # Megjegyzés: Ha a fájl nem létezik (pl. RHEL 10 még nincs kint), itt elbukhat, 
+      # de a logikában a verzió dinamikusan illeszkedik.
+
+    - name: 1. Lépés - Jelentés áthúzása a távoli gépről az AAP konténerbe
+      fetch:
+        src: /tmp/report.html
+        dest: "/tmp/oscap_sync/{{ inventory_hostname }}/"
+        flat: yes
+
+    - name: 2. Lépés - Célkönyvtár létrehozása az AAP hoston
+      file:
+        path: "{{ aap_destination_dir }}"
+        state: directory
+        # Megjegyzés: 'mode' és 'owner' beállításánál figyelni kell, 
+        # hogy az 'ansible' user létezzen a célgépen.
+        mode: '0755'
+        owner: ansible
+      delegate_to: "{{ aap_host_address }}"
+      become: yes
+
+    - name: 3. Lépés - Másolás az AAP konténerből az AAP hostra
+      copy:
+        src: "/tmp/oscap_sync/{{ inventory_hostname }}/report.html"
+        dest: "{{ aap_destination_dir }}/report_{{ timestamp }}.html"
+        owner: ansible
+        group: ansible
+        mode: '0644'
+      delegate_to: "{{ aap_host_address }}"
+      become: yes
+
+    - name: Ideiglenes fájl törlése a vizsgált gépről
+      file:
+        path: /tmp/report.html
+        state: absent
