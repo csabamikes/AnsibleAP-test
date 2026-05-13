@@ -1,0 +1,118 @@
+---
+- name: Reconcile Constructed Inventories from Dynamic Groups
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # --- KONFIGURÁCIÓ ---
+    controller_host: "https://192.168.1.185"
+    controller_oauthtoken: "eV4qFX2fT5rbrPoDuO7kvZNKnS3Fzu"
+      #    inv_info_id: 10
+    source_inv_name: "D42 Dynamic - mcs teszt"   # A forrás dynamic inventory neve
+
+    constructed_prefix: "Constr_"             #CID42_IFOINFRA_ Ezzel a prefixszel jönnek létre az újak
+    target_org: "invigor"                        # Az Organization neve
+    validate_certs: false
+
+  tasks:
+    # 1. SZINKRONIZÁLÁS (Sync the Dynamic Inventory)
+    #    - name: 1. Trigger Dynamic Inventory Sync
+    #  ansible.controller.inventory_source_update:
+    #    inventory: "{{ source_inv_name }}"
+    #    name: "D42_Source"  # Az inventory-n belüli source neve
+    #    wait: true
+    #    controller_host: "{{ controller_host }}"
+    #    controller_oauthtoken: "{{ controller_oauthtoken }}"
+      #    validate_certs: "{{ validate_certs }}"
+
+    # 2. API LEKÉRDEZÉS (Query the API for groups)
+    - name: 2. Get current groups from the dynamic inventory
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/inventories/?name={{ source_inv_name | urlencode }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+        validate_certs: "{{ validate_certs }}"
+        status_code: 200
+      register: current_groups_api
+
+    - name: 2b Get current groups from the dynamic inventory
+      ansible.builtin.uri:
+        # Itt az inv_info-ból nyerjük ki az ID-t: .results[0].id
+        url: "{{ controller_host }}/api/controller/v2/inventories/{{ current_groups_api.json.results[0].id }}/groups/?page_size=200"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+          Content-Type: "application/json"
+        validate_certs: "{{ validate_certs }}"
+      register: current_groups_api
+
+    - name: 3. Extract group names (excluding internal ones)
+      set_fact:
+        dynamic_groups: "{{ current_groups_api.json.results | map(attribute='name') | reject('match', '^all$|^ungrouped$') | list }}"
+
+    # 3. (Reconcile Inventories)
+    - name: 4. Get existing Constructed Inventories from AAP
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/inventories/?name__startswith={{ constructed_prefix }}&page_size=200"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+        validate_certs: "{{ validate_certs }}"
+      register: existing_invs_api
+
+    - name: 5. Identify inventories to delete
+      set_fact:
+        existing_names: "{{ existing_invs_api.json.results | map(attribute='name') | list }}"
+        target_names: "{{ dynamic_groups | map('regex_replace', '^', constructed_prefix) | list }}"
+
+    # 4. (Delete Constructed Inventories that no longer exist in dynamic groups)
+    - name: 6. Delete obsolete Constructed Inventories
+      ansible.controller.inventory:
+        name: "{{ item }}"
+        organization: "{{ target_org }}"
+        state: absent
+        controller_host: "{{ controller_host }}"
+        controller_oauthtoken: "{{ controller_oauthtoken }}"
+        validate_certs: "{{ validate_certs }}"
+      loop: "{{ existing_names | difference(target_names) }}"
+
+    # 5. (Create/Update Constructed Inventories)
+    - name: 7. Create/Update Constructed Inventories and Sources
+      block:
+        - name: 7a. Ensure Inventory exists
+          ansible.controller.inventory:
+            name: "{{ constructed_prefix }}{{ item }}"
+            organization: "{{ target_org }}"
+            state: present
+            controller_host: "{{ controller_host }}"
+            controller_oauthtoken: "{{ controller_oauthtoken }}"
+            validate_certs: "{{ validate_certs }}"
+            kind: "constructed"
+            input_inventories:
+              - "{{ source_inv_name }}"
+          loop: "{{ dynamic_groups }}"
+    - name: 7b. Ensure Constructed Source is configured
+      ansible.controller.inventory_source:
+        # The constructed inventory source will always be in the format:
+        # "Auto-created source for: <constructed inventory name>"
+        name: "Auto-created source for: {{ constructed_prefix }}{{ item }}"
+        inventory: "{{ constructed_prefix }}{{ item }}"
+        
+        source_vars:
+          plugin: "ansible.builtin.constructed"
+          strict: false
+        limit: "{{ item }}"
+            
+        controller_host: "{{ controller_host }}"
+        controller_oauthtoken: "{{ controller_oauthtoken }}"
+        validate_certs: "{{ validate_certs }}"
+      loop: "{{ dynamic_groups }}"
+    - name: Update inventory sources
+      ansible.controller.inventory_source_update:
+        name: "Auto-created source for: {{ constructed_prefix }}{{ item }}"
+        inventory: "{{ constructed_prefix }}{{ item }}"
+         #organization: Default
+        controller_host: "{{ controller_host }}"
+        controller_oauthtoken: "{{ controller_oauthtoken }}"
+        validate_certs: "{{ validate_certs }}"
+      loop: "{{ dynamic_groups }}"

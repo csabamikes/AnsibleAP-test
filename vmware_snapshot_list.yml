@@ -1,0 +1,54 @@
+---
+- name: VMware snapshotok listázása virtuális gépenként
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # Itt add meg a vCenter elérhetőségeit vagy használd az AAP Credential-öket
+    vcenter_hostname: "192.168.1.220" # "{{ lookup('env', 'VMWARE_HOST') }}"
+    vcenter_username: "administrator@vsphere.local" #"{{ lookup('env', 'VMWARE_USER') }}"
+    vcenter_password: "Root123.Root123!" #"{{ lookup('env', 'VMWARE_PASSWORD') }}"
+    validate_certs: false
+
+  tasks:
+    - name: Az összes VM listájának lekérése
+      community.vmware.vmware_vm_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ validate_certs }}"
+        vm_type: vm
+      register: all_vms
+
+    - name: Snapshot információk lekérése UUID használatával
+      community.vmware.vmware_guest_snapshot_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ validate_certs }}"
+        datacenter: "{{ item.datacenter }}"
+        # A név+mappa páros helyett az UUID-t használjuk, ez a legstabilabb
+        uuid: "{{ item.uuid }}"
+      loop: "{{ all_vms.virtual_machines }}"
+      loop_control:
+        label: "{{ item.guest_name }}" # Így az AAP logjaiban a VM nevét látod a loop-nál
+      register: individual_snapshot_info
+      ignore_errors: true
+    - name: Összesített jelentés készítése
+      ansible.builtin.debug:
+        msg: >
+          {%- set final_report = [] -%}
+          {%- for result in individual_snapshot_info.results -%}
+            {# Ellenőrizzük, hogy a task sikeres volt-e és van-e benne adat #}
+            {%- if result.failed is not defined or not result.failed -%}
+              {%- if result.guest_snapshots is defined and result.guest_snapshots.snapshots is defined -%}
+                {%- if result.guest_snapshots.snapshots | length > 0 -%}
+                  {%- set _ = final_report.append({
+                    'vm_name': result.item.guest_name,
+                    'snapshot_count': result.guest_snapshots.snapshots | length,
+                    'snapshot_names': result.guest_snapshots.snapshots | map(attribute='name') | list
+                  }) -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ final_report if final_report | length > 0 else "Nem található snapshot egyik vizsgált virtuális gépen sem." }}

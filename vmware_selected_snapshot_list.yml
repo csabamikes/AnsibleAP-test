@@ -1,0 +1,36 @@
+---
+- name: Snapshotok listázása inventory-ban megadott gépekhez
+  # Itt azokat a gépeket célozzuk, amik az inventory-ban vannak
+  hosts: vm_targets
+  gather_facts: false
+  vars:
+    # A vCenter jelszavakat továbbra is AAP Credential-ből várjuk
+    vcenter_username: "administrator@vsphere.local" #"{{ lookup('env', 'VMWARE_USER') }}"
+    vcenter_password: "Root123.Root123!" #"{{ lookup('env', 'VMWARE_PASSWORD') }}"
+    validate_certs: false
+
+  tasks:
+    - name: "{{ inventory_hostname }} snapshot információinak lekérése"
+      community.vmware.vmware_guest_snapshot_info:
+        # A vcenter_name változót az inventory-ból veszi át
+        datacenter: Invigor
+        folder: /
+        hostname: "{{ vcenter_name }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ validate_certs }}"
+        # A VM neve az inventory-ban szereplő név (teszt_machine)
+        name: "{{ inventory_hostname }}"
+      delegate_to: localhost
+      register: vm_snap_result
+      ignore_errors: true
+
+    - name: Snapshot adatok megjelenítése
+      ansible.builtin.debug:
+        msg: >
+          {%- if vm_snap_result.guest_snapshots is defined and vm_snap_result.guest_snapshots.snapshots | length > 0 -%}
+            VM: {{ inventory_hostname }} (vCenter: {{ vcenter_name }})
+            Snapshotok: {{ vm_snap_result.guest_snapshots.snapshots | map(attribute='name') | list }}
+          {%- else -%}
+            VM: {{ inventory_hostname }} - Nincs snapshot vagy a gép nem található.
+          {%- endif -%}

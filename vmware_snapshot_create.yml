@@ -1,0 +1,76 @@
+- name: Snapshot készítése dátummal ellátott névvel
+  hosts: vm_targets
+  gather_facts: false  # Ez kell, hogy az ansible_date_time elérhető legyen
+  vars:
+    # A vCenter jelszavakat továbbra is AAP Credential-ből várjuk
+    vcenter_username: "administrator@vsphere.local" #"{{ lookup('env', 'VMWARE_USER') }}"
+    vcenter_password: "Root123.Root123!" #"{{ lookup('env', 'VMWARE_PASSWORD') }}"
+    validate_certs: false
+
+
+  tasks:
+    - name: Aktuális dátum lekérése a futtató környezetből (localhost)
+      # A 'pipe' parancs lefuttatja a linuxos date parancsot
+      ansible.builtin.set_fact:
+        snapshot_nev: "{{ lookup('pipe', 'date +%Y.%m') }}.snapshot"
+      run_once: true # Elég egyszer lefutnia a localhoston, minden gép ugyanazt kapja
+
+    - name: "VM UUID lekérése a(z) {{ vcenter_name }} vCenterből"
+      community.vmware.vmware_vm_info:
+        hostname: "{{ vcenter_name }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ validate_certs }}"
+        vm_type: vm
+        vm_name: "{{ inventory_hostname }}"
+      delegate_to: localhost
+      register: search_result
+      ignore_errors: true
+      failed_when: false
+
+
+
+    - name: "Snapshot létrehozása a(z) {{ inventory_hostname }} gépen"
+      when:
+        - search_result.virtual_machines is defined
+        - search_result.virtual_machines | length > 0
+      vmware.vmware.vm_snapshot:
+        hostname: "{{ vcenter_name }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ validate_certs }}"
+        datacenter: "{{ datacenter_name | default(omit) }}" # Ha van az inventory-ban, használja
+        datacenter: Invigor
+        folder: /
+        name: "{{ inventory_hostname }}"
+        state: present
+        snapshot_name: "{{ snapshot_nev }}"
+        description: "Automatikus snapshot készítve AAP-ből ekkor: {{ lookup('pipe', 'date +%Y-%m-%d') }}"
+        memory_dump: false  # 'true' esetén elmenti a RAM állapotát is (lassabb)
+        quiesce: true       # ha kell, hogy "megnyugtassuk" a fájlrendszert (VMware Tools kell hozzá)
+      delegate_to: localhost
+      register: snapshot_result
+
+    - name: Visszajelzés
+      ansible.builtin.debug:
+        msg: >
+          {% if search_result.virtual_machines | length == 0 %}
+            HIBA: A(z) {{ inventory_hostname }} nem található.
+          {% elif snapshot_result.changed %}
+            "Sikeresen elkészült a '{{ snapshot_nev }}' nevű snapshot a(z) {{ inventory_hostname }} gépen."
+          {% endif %}
+      when: snapshot_result.changed
+
+    - name: Visszajelzés a törlésről
+      ansible.builtin.debug:
+        msg: >
+          {% set vms = search_result.virtual_machines | default([]) %}
+          {% if vms | length == 0 %}
+            FIGYELEM: A(z) '{{ inventory_hostname }}' nevű gép NEM LÉTEZIK (vagy hiba történt a keresésnél).
+          {% elif snapshot_result is defined and snapshot_result.changed %}
+            SIKER: Sikeresen elkészült a '{{ snapshot_nev }}' nevű snapshot a(z) {{ inventory_hostname }} gépen. 
+          {% elif snapshot_result is defined and not snapshot_result.changed %}
+            INFO: A gép megvan, de már létezik rajta '{{ snapshot_nev }}' nevű snapshot.
+          {% else %}
+            HIBA: A gép létezik, de a snapshot létrehozás nem sikerült vagy ismeretlen állapotba került.
+          {% endif %}

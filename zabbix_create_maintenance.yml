@@ -1,0 +1,57 @@
+---
+- name: Zabbix maintenance
+  hosts: vm_targets
+  gather_facts: false
+  collections:
+    - community.zabbix
+
+  vars:
+    ansible_host: "192.168.1.146"
+    ansible_user: "Admin"
+    ansible_httpapi_pass: "zabbix" #"{{ vault_zabbix_pass }}"                       # Ajánlott vault-ból
+      #ansible_zabbix_auth_key:
+
+    # Maintenance beállítások
+    maintenance_name: "Ansible - 3 oras maintenance"
+    maintenance_duration_hours: 3
+    maintenance_description: "Ansible playbook altal inditott karbantartas"
+
+  tasks:
+    - name: Aktuális időpont lekérése (facts nélkül)
+      ansible.builtin.set_fact:
+    #    current_time_iso: "{{ lookup('pipe', 'date --iso-8601=seconds') }}"
+    #    maintenance_name: "Ansible - 3 órás maintenance {{ lookup('pipe', 'date +%Y.%m.%d_%H-%M') }}"
+        harom: "{{ lookup('pipe', 'date -d \"+180 minutes\" +\"%Y-%m-%d %H:%M\"') }}"
+      run_once: true
+
+    - name: Zabbix maintenance ablak letrehozasa a megadott hostokra
+      vars:
+            ansible_network_os: community.zabbix.zabbix
+            ansible_connection: httpapi
+            ansible_httpapi_port: 80
+            ansible_httpapi_use_ssl: false
+            ansible_httpapi_validate_certs: false
+            ansible_zabbix_url_path: "/"
+      community.zabbix.zabbix_maintenance:
+        name: "{{ maintenance_name }}"
+        desc: "{{ maintenance_description }}"
+        state: absent
+        host_name: "{{ inventory_hostname }}" #"rhel9-02.example.com"
+          #active_since: "{{ now(fmt='%Y-%m-%d %H:%M') }}"
+          #active_till: "{{ harom }}" 
+        time_periods:
+          - frequency: once
+            duration: " {{ maintenance_duration_hours * 60 }}" 
+            start_date: "{{ now(fmt='%Y-%m-%d') }}"
+            start_time: "{{ now(fmt='%H:%M') }}"
+        tags:
+          - tag: "created_by"
+            value: "ansible"
+      delegate_to: localhost
+
+    - name: Információ a létrehozott maintenance-ről
+      ansible.builtin.debug:
+        msg: >
+          Maintenance sikeresen létrehozva: "{{ maintenance_name }}"
+          | Időtartam: {{ maintenance_duration_hours }} óra
+          | Hostok: {{ target_hosts | default('az összes megadott') }}

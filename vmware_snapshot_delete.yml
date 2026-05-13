@@ -1,0 +1,65 @@
+---
+- name: Snapshot törlése Survey változók alapján
+  hosts: vm_targets
+  gather_facts: false
+  vars:
+    # A vCenter jelszavakat továbbra is AAP Credential-ből várjuk
+    vcenter_username: "administrator@vsphere.local" #"{{ lookup('env', 'VMWARE_USER') }}"
+    vcenter_password: "Root123.Root123!" #"{{ lookup('env', 'VMWARE_PASSWORD') }}"
+    validate_certs: false
+    survey_ev: 2026
+    survey_honap: 3
+  tasks:
+    - name: Snapshot név összeállítása a Survey adatokból
+      ansible.builtin.set_fact:
+        # A Survey-ben megadott év és hónap alapján: pl. 2026.03.snapshot, ha 3 vagy 03 érkezik, akkor is 03-at ad
+        target_snapshot_name: "{{ survey_ev }}.{{ '%02d' | format(survey_honap | int) }}.snapshot"
+
+
+    - name: "VM UUID lekérése a(z) {{ vcenter_name }} vCenterből"
+      community.vmware.vmware_vm_info:
+        hostname: "{{ vcenter_name }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ validate_certs }}"
+        vm_type: vm
+        vm_name: "{{ inventory_hostname }}"
+      delegate_to: localhost
+      register: search_result
+      ignore_errors: true
+      failed_when: false
+
+    - name: "A megadott snapshot törlése ({{ target_snapshot_name }})"
+      # Csak akkor fut le, ha a gép megtalálható
+      when:
+        - search_result.virtual_machines is defined
+        - search_result.virtual_machines | length > 0
+      vmware.vmware.vm_snapshot:
+        hostname: "{{ vcenter_name }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ validate_certs }}"
+        datacenter: "{{ datacenter_name | default(omit) }}" # Ha van az inventory-ban, használja
+        datacenter: Invigor
+        folder: /
+        name: "{{ inventory_hostname }}"
+        snapshot_name: "{{ target_snapshot_name }}"
+        state: absent
+        # Ha a snapshotnak vannak gyermek-snapshotjai, azokat is törli:
+        remove_children: false 
+      delegate_to: localhost
+      register: delete_result
+    
+    - name: Visszajelzés a törlésről
+      ansible.builtin.debug:
+        msg: >
+          {% set vms = search_result.virtual_machines | default([]) %}
+          {% if vms | length == 0 %}
+            FIGYELEM: A(z) '{{ inventory_hostname }}' nevű gép NEM LÉTEZIK (vagy hiba történt a keresésnél).
+          {% elif delete_result is defined and delete_result.changed %}
+            SIKER: A(z) '{{ target_snapshot_name }}' snapshot törölve a(z) {{ inventory_hostname }} gépről.
+          {% elif delete_result is defined and not delete_result.changed %}
+            INFO: A gép megvan, de nincs rajta '{{ target_snapshot_name }}' nevű snapshot.
+          {% else %}
+            HIBA: A gép létezik, de a törlés nem sikerült vagy ismeretlen állapotba került.
+          {% endif %}

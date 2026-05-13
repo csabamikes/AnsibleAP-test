@@ -1,0 +1,133 @@
+---
+- name: VM létrehozása komplex CSV adatok alapján
+  hosts: localhost
+  gather_facts: false
+  vars:
+    #vcenter_username: "{{ lookup('env', 'VMWARE_USER') }}"
+    #vcenter_password: "{{ lookup('env', 'VMWARE_PASSWORD') }}"
+    vcenter_username: "administrator@vsphere.local"
+    vcenter_password: "Root123.Root123!"
+    datacenter: "Invigor"
+    csv_content: "192.168.1.220;192.168.1.222;VMtemplate01-from-rhel9-01;8.8.8.8, 192.168.1.1, 192.168.1.10;example.com,lolca.com;Szabolcse;20;1024;1;datastore1;/;VM Network;192.168.1.177;255.255.255.0; 192.168.1.1\n192.168.1.220;192.168.1.223;VMtemplate01-from-rhel9-02;8.8.8.8, 192.168.1.1, 192.168.1.10;example.com,lolca.com;Szabolcse2;20;1024;1;datastore1;/;VM Network;192.168.1.177;255.255.255.0; 192.168.1.1"
+
+  tasks:
+    - name: Mezőnevek definiálása2
+      set_fact:
+        csv_columns:
+          - vcenter_host
+          - esx_hostname
+          - template_name
+          - dns
+          - suffix
+          - vmname
+          - disksize
+          - memory
+          - vcpu
+          - ds
+          - folder
+          - vlan
+          - ip
+          - netmask
+          - gwi
+
+
+    - name: CSV string feldolgozása listává
+      set_fact:
+        server: "{{ csv_content | community.general.from_csv(fieldnames=csv_columns, delimiter=';') }}"
+    - name: print
+      debug:
+        msg: "Ez lett: {{ server }}"
+
+    - name: VM letrehozasa "{{ item.hostname }}"  template-bol
+      vmware.vmware.deploy_folder_template:
+        hostname:         "{{ item.vcenter_host }}"
+        username:         "{{ vcenter_username }}"
+        password:         "{{ vcenter_password }}"
+        validate_certs:   false
+        esxi_host: "{{ item.esx_hostname }}"
+
+        datacenter:       "Invigor"
+#        cluster:          "{{ item.cluster }}"
+        datastore:        "{{ item.ds }}"
+        vm_folder:        "{{ item.folder }}"
+        resource_pool: "Mikupool"
+        vm_name:          "{{ item.vmname }}"
+        template_name:    "{{ item.template_name }}"
+#        template_folder:  "{{ item.template_folder | default(omit) }}"
+
+        power_on_after_deploy: false   # konfiguraljuk, majd kapcsoljuk be
+
+      loop: "{{ server }}"
+      loop_control:
+        label: "{{ item.vmname }}"
+      register: deploy_results
+
+    - name: Hardware konfiguracio "{{ item.hostname }}" alkalmazasa
+      vmware.vmware.vm:
+        hostname:         "{{ item.vcenter_host }}"
+        username:         "{{ vcenter_username }}"
+        password:         "{{ vcenter_password }}"
+        validate_certs:   false
+          #        esxi_host: "{{ item.esx_hostname }}"
+
+#        datacenter:     "{{ item.datacenter }}"
+        datacenter:       "Invigor"
+ 
+        name:           "{{ item.vmname }}"
+
+        cpu:
+          cores: "{{ item.vcpu | int }}"
+
+        memory:
+          size_mb: "{{ item.memory | int }}"
+
+        disks:
+          - size:        "{{ item.disksize }}gb"
+            device_node: "SCSI(0:0)"
+            provisioning: thin
+            datastore:   "{{ item.ds }}"
+
+        network_adapters:
+          - adapter_type: vmxnet3
+            network:      "{{ item.vlan }}"
+
+        state: present
+
+      loop: "{{ server }}"
+      loop_control:
+        label: "{{ item.vmname }}"
+      register: hw_results
+      
+    - name: Statikus IP és hostname alkalmazása (Linux customization)
+      vmware.vmware.vm_apply_customization:
+        hostname:       "{{ vcenter_host }}"
+        username:       "{{ vcenter_username }}"
+        password:       "{{ vcenter_password }}"
+        validate_certs:   false
+          #        esxi_host: "{{ item.esx_hostname }}"
+
+        name:           "{{ item.vmname }}"
+#        datacenter:     "{{ item.datacenter }}"
+        datacenter:       "Invigor"
+
+
+        use_dhcpv4_for_all_nics: false
+
+        global_dns:
+          servers: "{{ item.dns.split(',') | map('trim') | list }}"
+
+        nic_specific_settings:
+          - ipv4:
+              address:     "{{ item.ip }}"
+              subnet_mask: "{{ item.netmask }}"
+              gateways:
+                - "{{ item.gwi }}"
+
+        unix_prep:
+          hostname: "{{ item.vmname }}"
+#          domain:   "{{ item.domain | default(vcenter_default_domain) }}"
+#          timezone: "{{ item.timezone | default('Europe/Budapest') }}"
+
+      loop: "{{ server }}"
+      loop_control:
+        label: "{{ item.vmname }}"
