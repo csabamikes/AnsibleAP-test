@@ -1,0 +1,12 @@
+plugin: device42.d42.d42 
+url: https://192.168.1.190
+username: admin
+password: Adm!nd42
+ssl_check: False
+debug: True
+clean_device_name: True
+keyed_groups:
+  - key: d42_service_level
+    prefix: ''
+    separator: ''
+
