@@ -62,9 +62,9 @@ DOCUMENTATION = r'''
 
 EXAMPLES = r'''
 plugin: device42.d42.d42
-url: https://10.10.10.10
+url: https://192.168.1.190
 username: admin
-password: password
+password: Adm!nd42
 ssl_check: False
 debug: False
 clean_device_name: True
