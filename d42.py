@@ -26,24 +26,24 @@ DOCUMENTATION = r'''
             type: string
             required: true
             env:
-                - name: D42_URL
+                - name: https://192.168.1.190
         username:
             description: The Device42 user account.
             type: string
             required: true
             env:
-                - name: D42_USER
+                - name: admin
         password:
             description: The Device42 instance user password.
             type: string
             secret: true
             required: true
             env:
-                - name: D42_PWD
+                - name: Adm!nd42
         ssl_check:
             description: SSL verification.
             type: boolean
-            default: true
+            default: false
             env:
                 - name: D42_SSL_CHECK
         debug:
