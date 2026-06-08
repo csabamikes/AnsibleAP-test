@@ -47,12 +47,12 @@ DOCUMENTATION = r'''
             env:
                 - name: D42_SSL_CHECK
 
- #       device_filter:
- #           description: DOQL filter clause.
- #           type: string
- #           required: no
- #           env:
- #               - name: D42_DOQL_FILTER
+        device_filter:
+            description: DOQL filter clause.
+            type: string
+            required: no
+            env:
+                - name: D42_DOQL_FILTER
 
         debug:
             description: Debug option.
