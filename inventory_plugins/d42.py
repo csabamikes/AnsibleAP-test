@@ -20,7 +20,7 @@ DOCUMENTATION = r'''
         plugin:
             description: The name of the Device42 Inventory Plugin, this should always be 'device42.d42.d42'.
             required: true
-            choices: ['device42.d42.d42']
+            choices: ['device42.d42.d42', 'd42']
         url:
             description: URI of Device42. The URI should be the fully-qualified domain name, e.g. 'your-instance.device42.net'.
             type: string
@@ -76,7 +76,7 @@ keyed_groups:
 
 
 class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
-    NAME = 'device42.d42.d42'
+    NAME = 'd42'
 
     def verify_file(self, path):
         valid = False
