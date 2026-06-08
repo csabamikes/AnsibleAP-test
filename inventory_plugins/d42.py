@@ -47,12 +47,12 @@ DOCUMENTATION = r'''
             env:
                 - name: D42_SSL_CHECK
 
-        device_filter:
-            description: DOQL filter clause.
-            type: string
-            required: no
-            env:
-                - name: D42_DOQL_FILTER
+ #       device_filter:
+ #           description: DOQL filter clause.
+ #           type: string
+ #           required: no
+ #           env:
+ #               - name: D42_DOQL_FILTER
 
         debug:
             description: Debug option.
@@ -146,8 +146,9 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         password = self.get_option('password')
         ssl_check = self.get_option('ssl_check')
         debug = self.get_option('debug')
-        device_filter = self.get_option('device_filter')
-        query = query + device_filter
+        
+#        device_filter = self.get_option('device_filter')
+#        query = query + device_filter
 
         data = {'output_type': 'json', 'query': query}
 
