@@ -46,8 +46,8 @@
       ansible.builtin.file:
         path: "{{ output_dir }}"
         state: directory
-        owner: ansible
-        group: ansible
+      #  owner: ansible
+      #  group: ansible
         mode: '0755'
       become: true
 
