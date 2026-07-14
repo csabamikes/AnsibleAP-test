@@ -1,20 +1,12 @@
 ---
-- name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése
-  hosts: localhost
+# ====================================================================
+# 1. PLAY: Ez fut a TÁVOLI GÉPEN (itt települnek a riport modulok)
+# ====================================================================
+- name: Távoli hostok előkészítése (Python csomagok telepítése)
+  hosts: rhel9-02  # <--- ITT VOLT A LOCALHOST, EZT ÍRD ÁT A TÁVOLI GÉP NEVÉRE!
   gather_facts: false
-  vars:
-    # --- SATELLITE BEÁLLÍTÁSOK ---
-    satellite_url: "https://satellite-01.example.com"
-    satellite_username: "admin"
-    satellite_password: "root123"
-    satellite_validate_certs: false
-    
-    # --- JELENTÉS BEÁLLÍTÁSAI ---
-    output_dir: "/home/ansible"
-    output_filename: "satellite_errata_riport.xlsx"
-
   tasks:
-    - name: Előfeltételek biztosítása a célgépen (RPM alapú rendszereken)
+    - name: Előfeltételek biztosítása a távoli gépen
       ansible.builtin.package:
         name:
           - python3-pandas
@@ -22,6 +14,21 @@
         state: present
       become: true
 
+# ====================================================================
+# 2. PLAY: Ez fut a VEZÉRLŐGÉPEN (innen hívjuk a Satellite API-t)
+# ====================================================================
+- name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése
+  hosts: localhost   # <--- Ez maradhat localhost, mert a Satellite API-t innen hívjuk meg
+  gather_facts: false
+  vars:
+    satellite_url: "https://example.com"
+    satellite_username: "admin"
+    satellite_password: "YourSecurePassword123"
+    satellite_validate_certs: false
+    output_dir: "/home/ansible"
+    output_filename: "satellite_errata_riport.xlsx"
+
+  tasks:
     - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
       redhat.satellite.host_info:
         server_url: "{{ satellite_url }}"
@@ -29,6 +36,7 @@
         password: "{{ satellite_password }}"
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
+      
 
     - name: Adatok strukturálása és előkészítése a riport számára
       ansible.builtin.set_fact:
