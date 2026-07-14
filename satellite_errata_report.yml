@@ -1,0 +1,80 @@
+---
+- name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # --- SATELLITE BEÁLLÍTÁSOK ---
+    satellite_url: "https://example.com"
+    satellite_username: "admin"
+    satellite_password: "YourSecurePassword123"
+    satellite_validate_certs: false
+    
+    # --- JELENTÉS BEÁLLÍTÁSAI ---
+    output_dir: "/home/ansible"
+    output_filename: "satellite_errata_riport.xlsx"
+
+  tasks:
+    - name: Előfeltételek biztosítása a célgépen (RPM alapú rendszereken)
+      ansible.builtin.package:
+        name:
+          - python3-pandas
+          - python3-openpyxl
+        state: present
+      become: true
+
+    - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
+      redhat.satellite.host_info:
+        server_url: "{{ satellite_url }}"
+        username: "{{ satellite_username }}"
+        password: "{{ satellite_password }}"
+        validate_certs: "{{ satellite_validate_certs }}"
+      register: satellite_hosts_raw
+
+    - name: Adatok strukturálása és előkészítése a riport számára
+      ansible.builtin.set_fact:
+        host_report_data: >-
+          {{
+            host_report_data | default([]) + [{
+              'Hostnév': item.name,
+              'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
+              'Környezet (Lifecycle)': item.lifecycle_environment_name | default('Nincs'),
+              'Összes Errata': (item.content_facet_attributes.applicable_errata_count | default(0)),
+              'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
+              'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
+              'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
+            }]
+          }}
+      loop: "{{ satellite_hosts_raw.hosts }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Célkönyvtár meglétének ellenőrzése
+      ansible.builtin.file:
+        path: "{{ output_dir }}"
+        state: directory
+        owner: ansible
+        group: ansible
+        mode: '0755'
+      become: true
+
+    - name: Excel fájl generálása beépített Python scripttel
+      ansible.builtin.shell:
+        cmd: |
+          python3 -c "
+          import pandas as pd
+          import json
+          
+          data = json.loads('''{{ host_report_data | to_json }}''')
+          
+          df = pd.DataFrame(data)
+          df = df[['Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle)', 'Összes Errata', 'Biztonsági (Security) Errata', 'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata']]
+          
+          with pd.ExcelWriter('{{ output_dir }}/{{ output_filename }}', engine='openpyxl') as writer:
+              df.to_excel(writer, index=False, sheet_name='Errata Riport')
+          "
+      vars:
+        ANSIBLE_PYTHON_INTERPRETER: /usr/bin/python3
+
+    - name: Visszajelzés a sikeres mentésről
+      ansible.builtin.debug:
+        msg: "Az Excel riport sikeresen elkészült és mentésre került: {{ output_dir }}/{{ output_filename }}"
