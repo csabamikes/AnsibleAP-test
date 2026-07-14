@@ -40,8 +40,8 @@
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
     satellite_url: "https://satellite-01.example.com"
-#    satellite_username: "admin"
-#    satellite_password: "root123"
+    satellite_username: "admin"
+    satellite_password: "root123"
     satellite_validate_certs: false
     
     # --- JELENTÉS BEÁLLÍTÁSAI ---
