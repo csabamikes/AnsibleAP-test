@@ -25,7 +25,7 @@
     satellite_username: "admin"
     satellite_password: "root123"
     satellite_validate_certs: false
-    output_dir: "/home/ansible"
+    output_dir: "/home/ansible/satellite-errata-report"
     output_filename: "satellite_errata_riport.xlsx"
 
   tasks:
