@@ -3,7 +3,7 @@
 # 1. PLAY: Ez fut a TÁVOLI GÉPEN (itt települnek a riport modulok)
 # ====================================================================
 - name: Távoli hostok előkészítése (Python csomagok telepítése)
-  hosts: all  # <--- ITT VOLT A LOCALHOST, EZT ÍRD ÁT A TÁVOLI GÉP NEVÉRE!
+  hosts: rhel9-01  # <--- ITT VOLT A LOCALHOST, EZT ÍRD ÁT A TÁVOLI GÉP NEVÉRE!
   gather_facts: false
   tasks:
     - name: Előfeltételek biztosítása a távoli gépen
