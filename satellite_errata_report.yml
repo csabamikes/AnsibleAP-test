@@ -125,4 +125,4 @@
 
     - name: Visszajelzés a sikeres mentésről
       ansible.builtin.debug:
-        msg: "Az Excel riport sikeresen elkészült a távoli gépen: {{ target_host }}:{{ output_dir }}/satellite-errata-report/{{ output_filename }}"
+        msg: "Az Excel riport sikeresen elkészült a távoli gépen: {{ target_host }}:{{ output_dir }}/{{ output_filename }}"
