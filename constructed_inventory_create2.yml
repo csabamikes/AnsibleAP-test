@@ -7,10 +7,12 @@
     controller_host: "https://192.168.1.185"
     controller_oauthtoken: "eV4qFX2fT5rbrPoDuO7kvZNKnS3Fzu"
       #    inv_info_id: 10
-    source_inv_name: "D42 Dynamic - mcs teszt"   # A forrás dynamic inventory neve
+      # source_inv_name: "D42 Dynamic - mcs teszt"   # A forrás dynamic inventory neve
+    source_inv_name: "d42.py test dynamic inventory"
 
     constructed_prefix: "Constr_"             #CID42_IFOINFRA_ Ezzel a prefixszel jönnek létre az újak
     target_org: "invigor"                        # Az Organization neve
+    target_team: "GS_SD_AAP_LNX_RO_TST"
     validate_certs: false
 
   tasks:
@@ -97,12 +99,12 @@
         # "Auto-created source for: <constructed inventory name>"
         name: "Auto-created source for: {{ constructed_prefix }}{{ item }}"
         inventory: "{{ constructed_prefix }}{{ item }}"
-        
+
         source_vars:
           plugin: "ansible.builtin.constructed"
           strict: false
         limit: "{{ item }}"
-            
+
         controller_host: "{{ controller_host }}"
         controller_oauthtoken: "{{ controller_oauthtoken }}"
         validate_certs: "{{ validate_certs }}"
@@ -112,6 +114,18 @@
         name: "Auto-created source for: {{ constructed_prefix }}{{ item }}"
         inventory: "{{ constructed_prefix }}{{ item }}"
          #organization: Default
+        controller_host: "{{ controller_host }}"
+        controller_oauthtoken: "{{ controller_oauthtoken }}"
+        validate_certs: "{{ validate_certs }}"
+      loop: "{{ dynamic_groups }}"
+
+   # <--- ÚJ FELADAT: RBAC "Inventory Use" jog hozzárendelése a Team-hez --->
+    - name: 8. Grant Inventory Use role to Team
+      ansible.controller.role:
+        team: "{{ target_team }}"
+        role: "use"                              # "use" jelöli az Inventory Use jogot AAP-ben
+        inventory: "{{ constructed_prefix }}{{ item }}"
+        state: present
         controller_host: "{{ controller_host }}"
         controller_oauthtoken: "{{ controller_oauthtoken }}"
         validate_certs: "{{ validate_certs }}"
