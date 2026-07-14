@@ -102,10 +102,10 @@
           df = df[['Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle)', 'Összes Errata', 'Biztonsági (Security) Errata', 'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata']]
 
           # Győződjünk meg róla, hogy a mappa létezik
-          os.makedirs('{{ output_dir }}/satellite-errata-report', exist_ok=True)
+          os.makedirs('{{ output_dir }}', exist_ok=True)
 
           # Mentés Excel formátumban
-          output_path = '{{ output_dir }}/satellite-errata-report/{{ output_filename }}'
+          output_path = '{{ output_dir }}/{{ output_filename }}'
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Riport')
           print(f"Sikeres mentés: {output_path}")
