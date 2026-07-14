@@ -80,7 +80,7 @@
 
     - name: Célkönyvtár ellenőrzése a TÁVOLI hoston
       ansible.builtin.file:
-        path: "{{ output_dir }}/satellite-errata-report"
+        path: "{{ output_dir }}/"
         state: directory
         mode: '0755'
       delegate_to: "{{ target_host }}"
