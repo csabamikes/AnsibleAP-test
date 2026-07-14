@@ -1,18 +1,55 @@
 ---
+# ====================================================================
+# 1. PLAY: Távoli hostok előkészítése (EPEL bekapcsolása és csomagok)
+# ====================================================================
+- name: Távoli hostok előkészítése (Python csomagok telepítése)
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Előfizetési tanúsítványok frissítése a Satellite-ból
+      ansible.builtin.command: subscription-manager refresh
+      become: true
+      register: sm_refresh
+      changed_when: "'All local certificates updated' in sm_refresh.stdout"
+
+    - name: Az EPEL repository engedélyezése a hoston
+      community.general.rhsm_repository:
+        name: "EPEL-9-Repo"  # <--- FIGYELEM: Ha a Satellite-ban más a repo label-ed, írd át!
+        state: enabled
+      become: true
+
+    - name: DNF gyorsítótár ürítése az új csatorna észlelése érdekében
+      ansible.builtin.command: dnf clean all
+      become: true
+      changed_when: true
+
+    - name: Előfeltételek biztosítása a távoli gépeken
+      ansible.builtin.package:
+        name:
+          - python3-pandas
+          - python3-openpyxl
+        state: present
+      become: true
 
 # ====================================================================
-# 2. PLAY: Ez fut a VEZÉRLŐGÉPEN (innen hívjuk a Satellite API-t)
+# 2. PLAY: Lekérdezés a Satellite-ból és mentés a kiválasztott hostra
 # ====================================================================
 - name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése
-  hosts: localhost   # <--- Ez maradhat localhost, mert a Satellite API-t innen hívjuk meg
+  hosts: localhost
   gather_facts: false
   vars:
-    satellite_url: "https://satellite-01.example.com"
+    # --- SATELLITE BEÁLLÍTÁSOK ---
+    satellite_url: "https://satellite-01-example.com"
     satellite_username: "admin"
     satellite_password: "root123"
     satellite_validate_certs: false
+    
+    # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
     output_filename: "satellite_errata_riport.xlsx"
+    
+    # --- CÉLHOST (Ahová a riportot menteni kell) ---
+    target_host: "rhel9-02" # <--- Ide írd be annak a távoli gépnek a nevét, ahol a /home/ansible mappa van!
 
   tasks:
     - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
@@ -22,7 +59,6 @@
         password: "{{ satellite_password }}"
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
-      
 
     - name: Adatok strukturálása és előkészítése a riport számára
       ansible.builtin.set_fact:
@@ -42,33 +78,51 @@
       loop_control:
         label: "{{ item.name }}"
 
-    - name: Célkönyvtár meglétének ellenőrzése
+    - name: Célkönyvtár ellenőrzése a TÁVOLI hoston
       ansible.builtin.file:
-        path: "{{ output_dir }}"
+        path: "{{ output_dir }}/satellite-errata-report"
         state: directory
-      #  owner: ansible
-      #  group: ansible
         mode: '0755'
-      become: true
+      delegate_to: "{{ target_host }}"
 
-    - name: Excel fájl generálása beépített Python scripttel
-      ansible.builtin.shell:
-        cmd: |
-          python3 -c "
+    - name: Python script legenerálása sablonból a távoli hoston
+      ansible.builtin.copy:
+        dest: "{{ output_dir }}/generate_report.py"
+        mode: '0755'
+        content: |
+          #!/usr/bin/env python3
           import pandas as pd
           import json
-          
-          data = json.loads('''{{ host_report_data | to_json }}''')
-          
+          import os
+
+          # Az Ansible által átadott adatok biztonságos beágyazása
+          data = {{ host_report_data | to_json }}
+
           df = pd.DataFrame(data)
           df = df[['Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle)', 'Összes Errata', 'Biztonsági (Security) Errata', 'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata']]
-          
-          with pd.ExcelWriter('{{ output_dir }}/{{ output_filename }}', engine='openpyxl') as writer:
+
+          # Győződjünk meg róla, hogy a mappa létezik
+          os.makedirs('{{ output_dir }}/satellite-errata-report', exist_ok=True)
+
+          # Mentés Excel formátumban
+          output_path = '{{ output_dir }}/satellite-errata-report/{{ output_filename }}'
+          with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Riport')
-          "
-      vars:
-        ANSIBLE_PYTHON_INTERPRETER: /usr/bin/python3
+          print(f"Sikeres mentés: {output_path}")
+      delegate_to: "{{ target_host }}"
+
+    - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
+      ansible.builtin.command:
+        cmd: "python3 {{ output_dir }}/generate_report.py"
+      register: script_output
+      delegate_to: "{{ target_host }}"
+
+    - name: Ideiglenes Python script törlése (Takarítás)
+      ansible.builtin.file:
+        path: "{{ output_dir }}/generate_report.py"
+        state: absent
+      delegate_to: "{{ target_host }}"
 
     - name: Visszajelzés a sikeres mentésről
       ansible.builtin.debug:
-        msg: "Az Excel riport sikeresen elkészült és mentésre került: {{ output_dir }}/{{ output_filename }}"
+        msg: "Az Excel riport sikeresen elkészült a távoli gépen: {{ target_host }}:{{ output_dir }}/satellite-errata-report/{{ output_filename }}"
