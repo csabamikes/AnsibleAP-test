@@ -1,18 +1,4 @@
 ---
-# ====================================================================
-# 1. PLAY: Ez fut a TÁVOLI GÉPEN (itt települnek a riport modulok)
-# ====================================================================
-- name: Távoli hostok előkészítése (Python csomagok telepítése)
-  hosts: all  # <--- ITT VOLT A LOCALHOST, EZT ÍRD ÁT A TÁVOLI GÉP NEVÉRE!
-  gather_facts: false
-  tasks:
-    - name: Előfeltételek biztosítása a távoli gépen
-      ansible.builtin.package:
-        name:
-          - python3-pandas
-          - python3-openpyxl
-        state: present
-      become: true
 
 # ====================================================================
 # 2. PLAY: Ez fut a VEZÉRLŐGÉPEN (innen hívjuk a Satellite API-t)
