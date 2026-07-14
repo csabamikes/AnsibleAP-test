@@ -14,7 +14,7 @@
 
     - name: Az EPEL repository engedélyezése a hoston
       community.general.rhsm_repository:
-        name: "EPEL-9-Repo"  # <--- FIGYELEM: Ha a Satellite-ban más a repo label-ed, írd át!
+        name: "Default_Organization_EPEL_EPEL-9-Repo"  # <--- FIGYELEM: Ha a Satellite-ban más a repo label-ed, írd át!
         state: enabled
       become: true
 
