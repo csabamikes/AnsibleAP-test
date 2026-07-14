@@ -12,11 +12,11 @@
       register: sm_refresh
       changed_when: "'All local certificates updated' in sm_refresh.stdout"
 
-    - name: Az EPEL repository engedélyezése a hoston
-      community.general.rhsm_repository:
-        name: "Default_Organization_EPEL_EPEL-9-Repo"  # <--- FIGYELEM: Ha a Satellite-ban más a repo label-ed, írd át!
-        state: enabled
-      become: true
+ #   - name: Az EPEL repository engedélyezése a hoston
+ #     community.general.rhsm_repository:
+ #       name: "Default_Organization_EPEL_EPEL-9-Repo"  # <--- FIGYELEM: Ha a Satellite-ban más a repo label-ed, írd át!
+ #       state: enabled
+ #     become: true
 
     - name: DNF gyorsítótár ürítése az új csatorna észlelése érdekében
       ansible.builtin.command: dnf clean all
