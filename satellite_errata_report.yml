@@ -39,9 +39,9 @@
             'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
           }]
           }}
-        loop: "{{ satellite_hosts_raw.hosts }}"
-        loop_control:
-          label: "{{ item.name }}"
+      loop: "{{ satellite_hosts_raw.hosts }}"
+      loop_control:
+        label: "{{ item.name }}"
 
     - name: Célkönyvtár ellenőrzése a távoli hoston
       ansible.builtin.file:
