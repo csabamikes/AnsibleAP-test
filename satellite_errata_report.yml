@@ -65,7 +65,21 @@
           # Az Ansible által átadott adatok biztonságos beágyazása
           data = {{ host_report_data | to_json }}
           df = pd.DataFrame(data)
-          df = df[['Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle)', 'Összes Errata', 'Biztonsági (Security) Errata', 'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata']]
+
+          # Elvárt oszlopok listája
+          elvart_oszlopok = [
+              'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle)', 
+              'Összes Errata', 'Biztonsági (Security) Errata', 
+              'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
+          ]
+
+          # Biztonsági ellenőrzés: Ha egy oszlop hiányzik az API-ból, létrehozzuk üresen
+          for oszlop in elvart_oszlopok:
+              if oszlop not in df.columns:
+                  df[oszlop] = 'Nincs'
+
+          # Oszlopok sorrendjének fixálása a jelentéshez
+          df = df[elvart_oszlopok]
 
           # Győződjünk meg róla, hogy a mappa létezik
           os.makedirs('{{ output_dir }}', exist_ok=True)
@@ -73,7 +87,7 @@
           # Trend adatok előkészítése a grafikon számára (Példa adatsor a havi alakuláshoz)
           trend_data = {
               'Hónap': ['Január', 'Február', 'Március', 'Április', 'Május', 'Június'],
-              'Átlagos Errata': [df['Összes Errata'].mean() * 1.2, df['Összes Errata'].mean() * 1.1, df['Összes Errata'].mean() * 0.95, df['Összes Errata'].mean() * 1.05, df['Összes Errata'].mean() * 0.85, df['Összes Errata'].mean()]
+              'Átlagos Errata': [df['Összes Errata'].mean() * 1.2, df['Összes Errata'].mean() * 1.1, df['Összes Errata'].mean() * 0.95, df['Összes Errata'].mean() * 1.05, df['Öngész Errata'].mean() * 0.85, df['Összes Errata'].mean()]
           }
           df_trend = pd.DataFrame(trend_data)
 
@@ -105,6 +119,7 @@
 
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
+
 
     - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
       ansible.builtin.command:
