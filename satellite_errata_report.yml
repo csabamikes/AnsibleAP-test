@@ -1,4 +1,5 @@
-- name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése
+---
+- name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése (Content View bontásban)
   hosts: all
   gather_facts: false
   vars:
@@ -7,14 +8,11 @@
     satellite_username: "admin"
     satellite_password: "root123"
     satellite_validate_certs: false
- 
     # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
     output_filename: "satellite_errata_report.xlsx"
- 
     # --- CÉLHOST (Ahová a riportot menteni kell) ---
-    target_host: "rhel9-02" # <--- Ide írd be annak a távoli gépnek a nevét, ahol a /home/ansible mappa van!
-
+    target_host: "rhel9-02" 
   tasks:
     - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
       redhat.satellite.host_info:
@@ -28,25 +26,22 @@
       ansible.builtin.set_fact:
         host_report_data: >-
           {{
-            host_report_data | default([]) + [{
-              'Hostnév': item.name,
-              'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
-              'Környezet (Lifecycle)': item.lifecycle_environment_name | 
-                                       default(item.lifecycle_environment.name) | 
-                                       default(item.content_facet_attributes.lifecycle_environment_name) | 
-                                       default(item.content_facet_attributes.lifecycle_environment.name) | 
-                                       default('Nincs'),
-              'Összes Errata': (item.content_facet_attributes.errata_counts.security | default(0) | int) + 
-                               (item.content_facet_attributes.errata_counts.bugfix | default(0) | int) + 
-                               (item.content_facet_attributes.errata_counts.enhancement | default(0) | int),
-              'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0) | int),
-              'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0) | int),
-              'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0) | int)
-            }]
+          host_report_data | default([]) + [{
+            'Content View': item.content_facet_attributes.content_view_name | default('Nincs CV / Ismeretlen'),
+            'Hostnév': item.name,
+            'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
+            'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment_id | default('Nincs'),
+            'Összes Errata': (item.content_facet_attributes.errata_counts.security | default(0) | int) + 
+                             (item.content_facet_attributes.errata_counts.bugfix | default(0) | int) + 
+                             (item.content_facet_attributes.errata_counts.enhancement | default(0) | int),
+            'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
+            'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
+            'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
+          }]
           }}
-      loop: "{{ satellite_hosts_raw.hosts }}"
-      loop_control:
-        label: "{{ item.name }}"
+        loop: "{{ satellite_hosts_raw.hosts }}"
+        loop_control:
+          label: "{{ item.name }}"
 
     - name: Célkönyvtár ellenőrzése a távoli hoston
       ansible.builtin.file:
@@ -65,29 +60,33 @@
           import json
           import os
           from openpyxl.chart import LineChart, Reference
-
+          
           # Az Ansible által átadott adatok biztonságos beágyazása
           data = {{ host_report_data | to_json }}
           df = pd.DataFrame(data)
-
-          # Elvárt oszlopok listája
+          
+          # Elvárt oszlopok listája (Content View-val az élen)
           elvart_oszlopok = [
-              'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle)', 
+              'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
               'Összes Errata', 'Biztonsági (Security) Errata', 
               'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
           ]
-
+          
           # Biztonsági ellenőrzés: Ha egy oszlop hiányzik az API-ból, létrehozzuk üresen
           for oszlop in elvart_oszlopok:
               if oszlop not in df.columns:
                   df[oszlop] = 'Nincs'
-
+          
           # Oszlopok sorrendjének fixálása a jelentéshez
           df = df[elvart_oszlopok]
-
+          
+          # MÓDOSÍTÁS: Adatok csoportosítása/rendezése Content View alapján
+          if not df.empty:
+              df = df.sort_values(by=['Content View', 'Hostnév']).reset_index(drop=True)
+          
           # Győződjünk meg róla, hogy a mappa létezik
           os.makedirs('{{ output_dir }}', exist_ok=True)
-
+          
           # Trend adatok előkészítése a grafikon számára
           avg_errata = df['Összes Errata'].mean() if not df.empty and 'Összes Errata' in df.columns else 0
           trend_data = {
@@ -95,7 +94,7 @@
               'Átlagos Errata': [avg_errata * 1.2, avg_errata * 1.1, avg_errata * 0.95, avg_errata * 1.05, avg_errata * 0.85, avg_errata]
           }
           df_trend = pd.DataFrame(trend_data)
-
+          
           # Mentés Excel formátumban
           output_path = '{{ output_dir }}/{{ output_filename }}'
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
@@ -121,11 +120,9 @@
               
               # Grafikon elhelyezése a Havi Trend fülön
               ws.add_chart(chart, "D2")
-
+          
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
-
-
 
     - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
       ansible.builtin.command:
