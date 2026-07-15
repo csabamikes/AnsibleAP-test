@@ -1,6 +1,3 @@
-# ====================================================================
-# 1. PLAY: Lekérdezés a Satellite-ból és mentés a kiválasztott hostra
-# ====================================================================
 - name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése
   hosts: all
   gather_facts: false
