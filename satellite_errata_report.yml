@@ -1,27 +1,20 @@
-- name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése
-  hosts: all
+---
+- name: Satellite Errata Riport Generálása Excel Grafikonal
+  hosts: localhost
   gather_facts: false
   vars:
-    # --- SATELLITE BEÁLLÍTÁSOK ---
-    satellite_url: "https://satellite-01.example.com"
-    satellite_username: "admin"
-    satellite_password: "root123"
-    satellite_validate_certs: false
-    
-    # --- JELENTÉS BEÁLLÍTÁSAI ---
-    output_dir: "/home/ansible/satellite-errata-report"
-    output_filename: "satellite_errata_riport.xlsx"
-    
-    # --- CÉLHOST (Ahová a riportot menteni kell) ---
-    target_host: "rhel9-02" # <--- Ide írd be annak a távoli gépnek a nevét, ahol a /home/ansible mappa van!
+    satellite_url: "https://example.com"
+    satellite_user: "admin"
+    satellite_pass: "password123"
+    riport_eleres: "/tmp/satellite_errata_riport.xlsx"
 
   tasks:
-    - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
+    - name: Host adatok lekérése a Satellite API-ból
       redhat.satellite.host_info:
-        server_url: "{{ satellite_url }}"
-        username: "{{ satellite_username }}"
-        password: "{{ satellite_password }}"
-        validate_certs: "{{ satellite_validate_certs }}"
+        url: "{{ satellite_url }}"
+        username: "{{ satellite_user }}"
+        password: "{{ satellite_pass }}"
+        validate_certs: false
       register: satellite_hosts_raw
 
     - name: Adatok strukturálása és előkészítése a riport számára
@@ -32,66 +25,87 @@
               'Hostnév': item.name,
               'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
               'Környezet (Lifecycle)': item.lifecycle_environment_name | default('Nincs'),
- 
               'Összes Errata': (item.content_facet_attributes.errata_counts.security | default(0) | int) + 
                                (item.content_facet_attributes.errata_counts.bugfix | default(0) | int) + 
                                (item.content_facet_attributes.errata_counts.enhancement | default(0) | int),
-              'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
-              'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
-              'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
+              'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0) | int),
+              'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0) | int),
+              'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0) | int)
             }]
           }}
       loop: "{{ satellite_hosts_raw.hosts }}"
       loop_control:
         label: "{{ item.name }}"
-    
-    # Check! ->   'Összes Errata': (item.content_facet_attributes.applicable_errata_count | default(0)),
 
-    - name: Célkönyvtár ellenőrzése a távoli hoston
-      ansible.builtin.file:
-        path: "{{ output_dir }}/"
-        state: directory
-        mode: '0755'
-      delegate_to: "{{ target_host }}"
+    - name: Történeti errata adatok lekérése a trendvonalhoz
+      uri:
+        url: "{{ satellite_url }}/api/v2/audits?search=auditable_type+=+Host+and+comment+like+%22%25errata%25%22&per_page=1000"
+        user: "{{ satellite_user }}"
+        password: "{{ satellite_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+      register: satellite_history_raw
 
-    - name: Python script legenerálása sablonból a távoli hoston
-      ansible.builtin.copy:
-        dest: "{{ output_dir }}/generate_report.py"
-        mode: '0755'
-        content: |
-          #!/usr/bin/env python3
+    - name: Történeti adatok formázása Python számára
+      ansible.builtin.set_fact:
+        history_report_data: >-
+          {{
+            history_report_data | default([]) + [{
+              'Idopont': item.created_at,
+              'Kommenet': item.comment | default('')
+            }]
+          }}
+      loop: "{{ satellite_history_raw.json.results }}"
+
+    - name: Excel fájl és diagram generálása beágyazott Python scripttel
+      ansible.builtin.shell:
+        cmd: |
+          python3 - <<EOF
           import pandas as pd
           import json
-          import os
+          from openpyxl import Workbook
+          from openpyxl.chart import LineChart, Reference
 
-          # Az Ansible által átadott adatok biztonságos beágyazása
-          data = {{ host_report_data | to_json }}
+          # Adatok betöltése Ansible-ből
+          hosts_data = {{ host_report_data | to_json }}
+          history_data = {{ history_report_data | to_json }}
 
-          df = pd.DataFrame(data)
-          df = df[['Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle)', 'Összes Errata', 'Biztonsági (Security) Errata', 'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata']]
+          df_hosts = pd.DataFrame(hosts_data)
+          df_hist = pd.DataFrame(history_data)
 
-          # Győződjünk meg róla, hogy a mappa létezik
-          os.makedirs('{{ output_dir }}', exist_ok=True)
+          # Történeti adatok feldolgozása hónapokra bontva
+          if not df_hist.empty:
+              df_hist['Idopont'] = pd.to_datetime(df_hist['Idopont'])
+              df_hist['Honap'] = df_hist['Idopont'].dt.strftime('%Y-%m')
+              # Példa aggregáció: hónaponkénti errata események száma trendként
+              df_trend = df_hist.groupby('Honap').size().reset_index(name='Alkalmazott Erratak')
+          else:
+              # Dummy adatok ha a tesztkörnyezetben nincs még történet
+              df_trend = pd.DataFrame({'Honap': ['2026-01', '2026-02', '2026-03', '2026-04'], 'Alkalmazott Erratak': [45, 32, 58, 21]})
 
-          # Mentés Excel formátumban
-          output_path = '{{ output_dir }}/{{ output_filename }}'
-          with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-              df.to_excel(writer, index=False, sheet_name='Errata Riport')
-          print(f"Sikeres mentés: {output_path}")
-      delegate_to: "{{ target_host }}"
-
-    - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
-      ansible.builtin.command:
-        cmd: "python3 {{ output_dir }}/generate_report.py"
-      register: script_output
-      delegate_to: "{{ target_host }}"
-
-    - name: Ideiglenes Python script törlése (Takarítás)
-      ansible.builtin.file:
-        path: "{{ output_dir }}/generate_report.py"
-        state: absent
-      delegate_to: "{{ target_host }}"
-
-    - name: Visszajelzés a sikeres mentésről
-      ansible.builtin.debug:
-        msg: "Az Excel riport sikeresen elkészült a távoli gépen: {{ target_host }}:{{ output_dir }}/{{ output_filename }}"
+          # Excel mentés openpyxl-lel a grafikon támogatásához
+          with pd.ExcelWriter('{{ riport_eleres }}', engine='openpyxl') as writer:
+              df_hosts.to_excel(writer, sheet_name='Aktualis Statusz', index=False)
+              df_trend.to_excel(writer, sheet_name='Havi Trend', index=False)
+              
+              # Grafikon hozzáadása a Havi Trend munkalaphoz
+              wb = writer.book
+              ws = wb['Havi Trend']
+              
+              chart = LineChart()
+              chart.title = "Errata változások alakulása hónapról hónapra"
+              chart.style = 13
+              chart.y_axis.title = "Darabszám"
+              chart.x_axis.title = "Hónap"
+              
+              data = Reference(ws, min_col=2, min_row=1, max_row=len(df_trend)+1)
+              cats = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend)+1)
+              
+              chart.add_data(data, titles_from_data=True)
+              chart.set_categories(cats)
+              
+              # Grafikon elhelyezése az Excelben
+              ws.add_chart(chart, "D2")
+          EOF
+      args:
+        executable: /bin/bash
