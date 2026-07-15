@@ -1,41 +1,8 @@
----
 # ====================================================================
-# 1. PLAY: Távoli hostok előkészítése (EPEL bekapcsolása és csomagok)
-# ====================================================================
-- name: Távoli hostok előkészítése (Python csomagok telepítése)
-  hosts: all
-  gather_facts: false
-  tasks:
-    - name: Előfizetési tanúsítványok frissítése a Satellite-ból
-      ansible.builtin.command: subscription-manager refresh
-      become: true
-      register: sm_refresh
-      changed_when: "'All local certificates updated' in sm_refresh.stdout"
-
- #   - name: Az EPEL repository engedélyezése a hoston
- #     community.general.rhsm_repository:
- #       name: "Default_Organization_EPEL_EPEL-9-Repo"  # <--- FIGYELEM: Ha a Satellite-ban más a repo label-ed, írd át!
- #       state: enabled
- #     become: true
-
-    - name: DNF gyorsítótár ürítése az új csatorna észlelése érdekében
-      ansible.builtin.command: dnf clean all
-      become: true
-      changed_when: true
-
- #   - name: Előfeltételek biztosítása a távoli gépeken
- #     ansible.builtin.package:
- #       name:
- #         - python3-pandas
- #         - python3-openpyxl
- #       state: present
- #     become: true
-
-# ====================================================================
-# 2. PLAY: Lekérdezés a Satellite-ból és mentés a kiválasztott hostra
+# 1. PLAY: Lekérdezés a Satellite-ból és mentés a kiválasztott hostra
 # ====================================================================
 - name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése
-  hosts: localhost
+  hosts: all
   gather_facts: false
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
