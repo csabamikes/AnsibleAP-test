@@ -32,7 +32,10 @@
               'Hostnév': item.name,
               'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
               'Környezet (Lifecycle)': item.lifecycle_environment_name | default('Nincs'),
-              'Összes Errata': (item.content_facet_attributes.applicable_errata_count | default(0)),
+       #       'Összes Errata': (item.content_facet_attributes.applicable_errata_count | default(0)),
+              'Összes Errata': (item.content_facet_attributes.errata_counts.security | default(0) | int) + 
+                               (item.content_facet_attributes.errata_counts.bugfix | default(0) | int) + 
+                               (item.content_facet_attributes.errata_counts.enhancement | default(0) | int),
               'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
               'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
               'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
