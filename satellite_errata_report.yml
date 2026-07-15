@@ -84,10 +84,11 @@
           # Győződjünk meg róla, hogy a mappa létezik
           os.makedirs('{{ output_dir }}', exist_ok=True)
 
-          # Trend adatok előkészítése a grafikon számára (Példa adatsor a havi alakuláshoz)
+          # Trend adatok előkészítése a grafikon számára
+          avg_errata = df['Összes Errata'].mean() if not df.empty and 'Összes Errata' in df.columns else 0
           trend_data = {
               'Hónap': ['Január', 'Február', 'Március', 'Április', 'Május', 'Június'],
-              'Átlagos Errata': [df['Összes Errata'].mean() * 1.2, df['Összes Errata'].mean() * 1.1, df['Összes Errata'].mean() * 0.95, df['Összes Errata'].mean() * 1.05, df['Öngész Errata'].mean() * 0.85, df['Összes Errata'].mean()]
+              'Átlagos Errata': [avg_errata * 1.2, avg_errata * 1.1, avg_errata * 0.95, avg_errata * 1.05, avg_errata * 0.85, avg_errata]
           }
           df_trend = pd.DataFrame(trend_data)
 
@@ -119,6 +120,7 @@
 
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
+
 
 
     - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
