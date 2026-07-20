@@ -1,6 +1,6 @@
 ---
 - name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése (Content View bontásban)
-  hosts: all
+  hosts: localhost
   gather_facts: false
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
