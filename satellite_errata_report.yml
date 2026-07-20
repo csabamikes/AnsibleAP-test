@@ -123,9 +123,11 @@
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
 
-    - name: Biztosítjuk, hogy az openpyxl telepítve legyen a célgépen
+    - name: Biztosítjuk, hogy az python openpyxl és pandas telepítve legyen a célgépen
       ansible.builtin.pip:
-        name: openpyxl
+        name: 
+          - openpyxl
+          - pandas
         state: present
       delegate_to: "{{ target_host }}"
 
