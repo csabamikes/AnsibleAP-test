@@ -16,8 +16,8 @@
     - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
       redhat.satellite.host_info:
         server_url: "{{ satellite_url }}"
-        username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USERNAME') }}"
-        password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASSWORD') }}"
+        username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
+        password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
 
