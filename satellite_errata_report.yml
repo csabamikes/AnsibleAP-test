@@ -7,8 +7,8 @@
     # --- SATELLITE BEÁLLÍTÁSOK ---
     satellite_url: "https://satellite-01.example.com"
     satellite_validate_certs: false
-    # --- JELENTÉS BEÁLLÍTÁSAI (Visszatérve a fix, látható otthoni könyvtárhoz) ---
-    output_dir: "/home/ansible/satellite-errata-report"
+    # --- JELENTÉS BEÁLLÍTÁSAI (Minden gépen létező, globálisan írható mappa) ---
+    output_dir: "/var/tmp/satellite-errata-report"
     output_filename: "satellite_errata_report.xlsx"
     # --- CÉLHOST (Ahová a riportot menteni kell) ---
     target_host: "rhel9-02" 
@@ -42,13 +42,11 @@
       loop_control:
         label: "{{ item.name }}"
 
-    - name: Célkönyvtár ellenőrzése a távoli hoston (Kikényszerített ansible tulajdonossal)
+    - name: Célkönyvtár ellenőrzése a távoli hoston
       ansible.builtin.file:
         path: "{{ output_dir }}"
         state: directory
-        mode: '0775'
-        owner: ansible
-        group: ansible
+        mode: '0777'  # Teljes hozzáférést adunk a mappára mindenkinek
       delegate_to: "{{ target_host }}"
 
     - name: Biztosítjuk, hogy az python openpyxl és pandas telepítve legyen a célgépen
@@ -63,17 +61,13 @@
       ansible.builtin.copy:
         dest: "{{ output_dir }}/satellite_data.json"
         content: "{{ host_report_data | to_json }}"
-        mode: '0664'
-        owner: ansible
-        group: ansible
+        mode: '0666'
       delegate_to: "{{ target_host }}"
 
     - name: Python script legenerálása a távoli hoston (Adatbeolvasás JSON-ből)
       ansible.builtin.copy:
         dest: "{{ output_dir }}/generate_report.py"
-        mode: '0755'
-        owner: ansible
-        group: ansible
+        mode: '0777'
         content: |
           #!/usr/bin/env python3
           import pandas as pd
@@ -144,9 +138,7 @@
     - name: Jogosultságok fixálása a kimeneti Excel fájlon
       ansible.builtin.file:
         path: "{{ output_dir }}/{{ output_filename }}"
-        mode: '0664'
-        owner: ansible
-        group: ansible
+        mode: '0666'  # Bárki számára írhatóvá és olvashatóvá tesszük a fájlt
       delegate_to: "{{ target_host }}"
 
     - name: Visszajelzés a sikeres mentésről
