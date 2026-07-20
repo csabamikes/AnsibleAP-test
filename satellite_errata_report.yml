@@ -8,7 +8,7 @@
     satellite_url: "https://satellite-01.example.com"
     satellite_validate_certs: false
     # --- JELENTÉS BEÁLLÍTÁSAI ---
-    output_dir: "/home/ansible/satellite-errata-report"
+    output_dir: "/tmp/satellite-errata-report"
     output_filename: "satellite_errata_report.xlsx"
     # --- CÉLHOST (Ahová a riportot menteni kell) ---
     target_host: "rhel9-02" 
@@ -153,6 +153,14 @@
       loop:
         - "{{ output_dir }}/generate_report.py"
         - "{{ output_dir }}/satellite_data.json"
+      delegate_to: "{{ target_host }}"
+
+    - name: Jogosultságok biztosítása a legenerált Excel fájlra
+      ansible.builtin.file:
+        path: "{{ output_dir }}/{{ output_filename }}"
+        mode: '0644'
+        owner: ansible   # Ha létezik az ansible user, tulajdonosul adjuk neki
+      ignore_errors: true # Ha nincs ilyen nevű user a gépen, ne omoljon össze a futás
       delegate_to: "{{ target_host }}"
 
     - name: Visszajelzés a sikeres mentésről
