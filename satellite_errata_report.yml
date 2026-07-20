@@ -123,16 +123,15 @@
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
 
- #   - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
- #     ansible.builtin.command:
- #       cmd: "python3 {{ output_dir }}/generate_report.py"
- #     register: script_output
- #     delegate_to: "{{ target_host }}"
-
     - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
       ansible.builtin.command:
-        cmd: "python3 {{ output_dir }}/generate_report.py"
-      delegate_to: "{{ target_host }}"   # <-- EZT A SORT ADJA HOZZÁ!
+        # A 'python3 -m pip' környezetén keresztül futtatjuk, vagy teljes elérési úttal
+        cmd: "python3 /home/ansible/satellite-errata-report/generate_report.py"
+      delegate_to: "{{ target_host }}"
+      environment:
+        # Kényszerítjük a Python-t, hogy nézze a felhasználó saját pip könyvtárait is
+        PYTHONPATH: "/home/ansible/.local/lib/python3.9/site-packages:/usr/local/lib/python3/dist-packages"
+
       
     - name: Ideiglenes Python script törlése (Takarítás)
       ansible.builtin.file:
