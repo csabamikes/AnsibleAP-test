@@ -26,16 +26,16 @@
         host_report_data: >-
           {{
           host_report_data | default([]) + [{
-            'Content View': item.content_facet_attributes.content_view_name | default('Nincs CV / Ismeretlen'),
-            'Hostnév': item.name,
-            'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
-            'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment_id | default('Nincs'),
-            'Összes Errata': (item.content_facet_attributes.errata_counts.security | default(0) | int) + 
-                             (item.content_facet_attributes.errata_counts.bugfix | default(0) | int) + 
-                             (item.content_facet_attributes.errata_counts.enhancement | default(0) | int),
-            'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
-            'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
-            'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
+          'Content View': item.content_facet_attributes.content_view_name | default('Nincs CV / Ismeretlen'),
+          'Hostnév': item.name,
+          'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
+          'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment_id | default('Nincs'),
+          'Összes Errata': (item.content_facet_attributes.errata_counts.security | default(0) | int) + 
+                           (item.content_facet_attributes.errata_counts.bugfix | default(0) | int) + 
+                           (item.content_facet_attributes.errata_counts.enhancement | default(0) | int),
+          'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
+          'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
+          'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
           }]
           }}
       loop: "{{ satellite_hosts_raw.hosts }}"
@@ -49,7 +49,22 @@
         mode: '0755'
       delegate_to: "{{ target_host }}"
 
-    - name: Python script legenerálása sablonból a távoli hoston
+    - name: Biztosítjuk, hogy az python openpyxl és pandas telepítve legyen a célgépen
+      ansible.builtin.pip:
+        name: 
+          - openpyxl
+          - pandas
+        state: present
+      delegate_to: "{{ target_host }}"
+
+    - name: Nyers adatok átmásolása JSON fájlként a távoli hostra
+      ansible.builtin.copy:
+        dest: "{{ output_dir }}/satellite_data.json"
+        content: "{{ host_report_data | to_json }}"
+        mode: '0644'
+      delegate_to: "{{ target_host }}"
+
+    - name: Python script legenerálása a távoli hoston (Adatbeolvasás JSON-ből)
       ansible.builtin.copy:
         dest: "{{ output_dir }}/generate_report.py"
         mode: '0755'
@@ -60,22 +75,25 @@
           import os
           from openpyxl.chart import LineChart, Reference
           
-          # Az Ansible által átadott adatok biztonságos beágyazása
-          data = {{ host_report_data | to_json }}
+          # Adatok beolvasása a helyi JSON fájlból az AAP memóriatúlcsordulás elkerülésére
+          json_path = '{{ output_dir }}/satellite_data.json'
+          with open(json_path, 'r', encoding='utf-8') as f:
+              data = json.load(f)
+              
           df = pd.DataFrame(data)
           
           # Elvárt oszlopok listája (Content View-val az élen)
           elvart_oszlopok = [
-              'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
-              'Összes Errata', 'Biztonsági (Security) Errata', 
-              'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
+          'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
+          'Összes Errata', 'Biztonsági (Security) Errata', 
+          'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
           ]
           
           # Biztonsági ellenőrzés: Ha egy oszlop hiányzik az API-ból, létrehozzuk üresen
           for oszlop in elvart_oszlopok:
               if oszlop not in df.columns:
                   df[oszlop] = 'Nincs'
-          
+                  
           # Oszlopok sorrendjének fixálása a jelentéshez
           df = df[elvart_oszlopok]
           
@@ -89,8 +107,8 @@
           # Trend adatok előkészítése a grafikon számára
           avg_errata = df['Összes Errata'].mean() if not df.empty and 'Összes Errata' in df.columns else 0
           trend_data = {
-              'Hónap': ['Január', 'Február', 'Március', 'Április', 'Május', 'Június'],
-              'Átlagos Errata': [avg_errata * 1.2, avg_errata * 1.1, avg_errata * 0.95, avg_errata * 1.05, avg_errata * 0.85, avg_errata]
+          'Hónap': ['Január', 'Február', 'Március', 'Április', 'Május', 'Június'],
+          'Átlagos Errata': [avg_errata * 1.2, avg_errata * 1.1, avg_errata * 0.95, avg_errata * 1.05, avg_errata * 0.85, avg_errata]
           }
           df_trend = pd.DataFrame(trend_data)
           
@@ -99,36 +117,28 @@
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Riport')
               df_trend.to_excel(writer, index=False, sheet_name='Havi Trend')
-              
-              # Grafikon inicializálása
-              wb = writer.book
-              ws = wb['Havi Trend']
-              
-              chart = LineChart()
-              chart.title = "Errata Alakulása Hónapról Hónapra"
-              chart.style = 13
-              chart.y_axis.title = "Darabszám"
-              chart.x_axis.title = "Hónap"
-              
-              # Adatok és kategóriák kijelölése a grafikonhoz
-              data_ref = Reference(ws, min_col=2, min_row=1, max_row=len(df_trend) + 1)
-              cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend) + 1)
-              
-              chart.add_data(data_ref, titles_from_data=True)
-              chart.set_categories(cats_ref)
-              
-              # Grafikon elhelyezése a Havi Trend fülön
-              ws.add_chart(chart, "D2")
+          
+          # Grafikon inicializálása
+          wb = writer.book
+          ws = wb['Havi Trend']
+          
+          chart = LineChart()
+          chart.title = "Errata Alakulása Hónapról Hónapra"
+          chart.style = 13
+          chart.y_axis.title = "Darabszám"
+          chart.x_axis.title = "Hónap"
+          
+          # Adatok és kategóriák kijelölése a grafikonhoz
+          data_ref = Reference(ws, min_col=2, min_row=1, max_row=len(df_trend) + 1)
+          cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend) + 1)
+          
+          chart.add_data(data_ref, titles_from_data=True)
+          chart.set_categories(cats_ref)
+          
+          # Grafikon elhelyezése a Havi Trend fülön
+          ws.add_chart(chart, "D2")
           
           print(f"Sikeres mentés: {output_path}")
-      delegate_to: "{{ target_host }}"
-
-    - name: Biztosítjuk, hogy az python openpyxl és pandas telepítve legyen a célgépen
-      ansible.builtin.pip:
-        name: 
-          - openpyxl
-          - pandas
-        state: present
       delegate_to: "{{ target_host }}"
 
     - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
@@ -136,11 +146,13 @@
         cmd: "python3 {{ output_dir }}/generate_report.py"
       delegate_to: "{{ target_host }}"
 
-      
-    - name: Ideiglenes Python script törlése (Takarítás)
+    - name: Ideiglenes Python és JSON fájlok törlése (Takarítás)
       ansible.builtin.file:
-        path: "{{ output_dir }}/generate_report.py"
+        path: "{{ item }}"
         state: absent
+      loop:
+        - "{{ output_dir }}/generate_report.py"
+        - "{{ output_dir }}/satellite_data.json"
       delegate_to: "{{ target_host }}"
 
     - name: Visszajelzés a sikeres mentésről
