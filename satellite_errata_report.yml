@@ -109,22 +109,23 @@
               df.to_excel(writer, index=False, sheet_name='Errata Riport')
               df_trend.to_excel(writer, index=False, sheet_name='Havi Trend')
           
-          wb = writer.book
-          ws = wb['Havi Trend']
-          
-          chart = LineChart()
-          chart.title = "Errata Alakulása Hónapról Hónapra"
-          chart.style = 13
-          chart.y_axis.title = "Darabszám"
-          chart.x_axis.title = "Hónap"
-          
-          data_ref = Reference(ws, min_col=2, min_row=1, max_row=len(df_trend) + 1)
-          cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend) + 1)
-          
-          chart.add_data(data_ref, titles_from_data=True)
-          chart.set_categories(cats_ref)
-          
-          ws.add_chart(chart, "D2")
+              # JAVÍTÁS: A grafikon generálása visszakerült a lezárás előtti, megfelelő blokkba
+              wb = writer.book
+              ws = wb['Havi Trend']
+              
+              chart = LineChart()
+              chart.title = "Errata Alakulása Hónapról Hónapra"
+              chart.style = 13
+              chart.y_axis.title = "Darabszám"
+              chart.x_axis.title = "Hónap"
+              
+              data_ref = Reference(ws, min_col=2, min_row=1, max_row=len(df_trend) + 1)
+              cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend) + 1)
+              
+              chart.add_data(data_ref, titles_from_data=True)
+              chart.set_categories(cats_ref)
+              
+              ws.add_chart(chart, "D2")
           
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
