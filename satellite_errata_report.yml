@@ -7,8 +7,8 @@
     # --- SATELLITE BEÁLLÍTÁSOK ---
     satellite_url: "https://satellite-01.example.com"
     satellite_validate_certs: false
-    # --- JELENTÉS BEÁLLÍTÁSAI ---
-    output_dir: "/tmp/satellite-errata-report"
+    # --- JELENTÉS BEÁLLÍTÁSAI (Visszatérve a fix, látható otthoni könyvtárhoz) ---
+    output_dir: "/home/ansible/satellite-errata-report"
     output_filename: "satellite_errata_report.xlsx"
     # --- CÉLHOST (Ahová a riportot menteni kell) ---
     target_host: "rhel9-02" 
@@ -42,11 +42,13 @@
       loop_control:
         label: "{{ item.name }}"
 
-    - name: Célkönyvtár ellenőrzése a távoli hoston
+    - name: Célkönyvtár ellenőrzése a távoli hoston (Kikényszerített ansible tulajdonossal)
       ansible.builtin.file:
-        path: "{{ output_dir }}/"
+        path: "{{ output_dir }}"
         state: directory
-        mode: '0755'
+        mode: '0775'
+        owner: ansible
+        group: ansible
       delegate_to: "{{ target_host }}"
 
     - name: Biztosítjuk, hogy az python openpyxl és pandas telepítve legyen a célgépen
@@ -61,13 +63,17 @@
       ansible.builtin.copy:
         dest: "{{ output_dir }}/satellite_data.json"
         content: "{{ host_report_data | to_json }}"
-        mode: '0644'
+        mode: '0664'
+        owner: ansible
+        group: ansible
       delegate_to: "{{ target_host }}"
 
     - name: Python script legenerálása a távoli hoston (Adatbeolvasás JSON-ből)
       ansible.builtin.copy:
         dest: "{{ output_dir }}/generate_report.py"
         mode: '0755'
+        owner: ansible
+        group: ansible
         content: |
           #!/usr/bin/env python3
           import pandas as pd
@@ -75,36 +81,29 @@
           import os
           from openpyxl.chart import LineChart, Reference
           
-          # Adatok beolvasása a helyi JSON fájlból az AAP memóriatúlcsordulás elkerülésére
           json_path = '{{ output_dir }}/satellite_data.json'
           with open(json_path, 'r', encoding='utf-8') as f:
               data = json.load(f)
               
           df = pd.DataFrame(data)
           
-          # Elvárt oszlopok listája (Content View-val az élen)
           elvart_oszlopok = [
           'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
           'Összes Errata', 'Biztonsági (Security) Errata', 
           'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
           ]
           
-          # Biztonsági ellenőrzés: Ha egy oszlop hiányzik az API-ból, létrehozzuk üresen
           for oszlop in elvart_oszlopok:
               if oszlop not in df.columns:
                   df[oszlop] = 'Nincs'
                   
-          # Oszlopok sorrendjének fixálása a jelentéshez
           df = df[elvart_oszlopok]
           
-          # MÓDOSÍTÁS: Adatok csoportosítása/rendezése Content View alapján
           if not df.empty:
               df = df.sort_values(by=['Content View', 'Hostnév']).reset_index(drop=True)
           
-          # Győződjünk meg róla, hogy a mappa létezik
           os.makedirs('{{ output_dir }}', exist_ok=True)
           
-          # Trend adatok előkészítése a grafikon számára
           avg_errata = df['Összes Errata'].mean() if not df.empty and 'Összes Errata' in df.columns else 0
           trend_data = {
           'Hónap': ['Január', 'Február', 'Március', 'Április', 'Május', 'Június'],
@@ -112,13 +111,11 @@
           }
           df_trend = pd.DataFrame(trend_data)
           
-          # Mentés Excel formátumban
           output_path = '{{ output_dir }}/{{ output_filename }}'
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Riport')
               df_trend.to_excel(writer, index=False, sheet_name='Havi Trend')
           
-          # Grafikon inicializálása
           wb = writer.book
           ws = wb['Havi Trend']
           
@@ -128,14 +125,12 @@
           chart.y_axis.title = "Darabszám"
           chart.x_axis.title = "Hónap"
           
-          # Adatok és kategóriák kijelölése a grafikonhoz
           data_ref = Reference(ws, min_col=2, min_row=1, max_row=len(df_trend) + 1)
           cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend) + 1)
           
           chart.add_data(data_ref, titles_from_data=True)
           chart.set_categories(cats_ref)
           
-          # Grafikon elhelyezése a Havi Trend fülön
           ws.add_chart(chart, "D2")
           
           print(f"Sikeres mentés: {output_path}")
@@ -146,21 +141,12 @@
         cmd: "python3 {{ output_dir }}/generate_report.py"
       delegate_to: "{{ target_host }}"
 
-    - name: Ideiglenes Python és JSON fájlok törlése (Takarítás)
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - "{{ output_dir }}/generate_report.py"
-        - "{{ output_dir }}/satellite_data.json"
-      delegate_to: "{{ target_host }}"
-
-    - name: Jogosultságok biztosítása a legenerált Excel fájlra
+    - name: Jogosultságok fixálása a kimeneti Excel fájlon
       ansible.builtin.file:
         path: "{{ output_dir }}/{{ output_filename }}"
-        mode: '0644'
-        owner: ansible   # Ha létezik az ansible user, tulajdonosul adjuk neki
-      ignore_errors: true # Ha nincs ilyen nevű user a gépen, ne omoljon össze a futás
+        mode: '0664'
+        owner: ansible
+        group: ansible
       delegate_to: "{{ target_host }}"
 
     - name: Visszajelzés a sikeres mentésről
