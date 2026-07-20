@@ -7,7 +7,7 @@
     satellite_url: "https://satellite-01.example.com"
     satellite_validate_certs: false
     # --- JELENTÉS BEÁLLÍTÁSAI (A biztosan fix és elrejthetetlen /opt könyvtár) ---
-    output_dir: "/opt/satellite-errata-report"
+    output_dir: "/home/ansible/satellite-errata-report"
     output_filename: "satellite_errata_report.xlsx"
     # --- CÉLHOST (Ahová a riportot menteni kell) ---
     target_host: "rhel9-02" 
