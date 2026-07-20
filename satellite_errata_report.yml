@@ -6,8 +6,6 @@
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
     satellite_url: "https://satellite-01.example.com"
-#    satellite_username: "admin"
-#    satellite_password: "root123"
     satellite_validate_certs: false
     # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
@@ -18,8 +16,8 @@
     - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
       redhat.satellite.host_info:
         server_url: "{{ satellite_url }}"
-#        username: "{{ satellite_username }}"
-#        password: "{{ satellite_password }}"
+        username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USERNAME') }}"
+        password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASSWORD') }}"
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
 
