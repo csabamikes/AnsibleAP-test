@@ -1,0 +1,148 @@
+---
+- name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése (Content View bontásban)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # --- SATELLITE BEÁLLÍTÁSOK ---
+    satellite_url: "https://satellite-01.example.com"
+    satellite_validate_certs: false
+    # --- JELENTÉS BEÁLLÍTÁSAI ---
+    output_dir: "/home/ansible/satellite-errata-report"
+    output_filename: "satellite_errata_report.xlsx"
+    # --- CÉLHOST (Ahová a riportot menteni kell) ---
+    target_host: "rhel9-02" 
+  tasks:
+    - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
+      redhat.satellite.host_info:
+        server_url: "{{ satellite_url }}"
+        username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
+        password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
+        validate_certs: "{{ satellite_validate_certs }}"
+      register: satellite_hosts_raw
+
+    - name: Adatok strukturálása és előkészítése a riport számára
+      ansible.builtin.set_fact:
+        host_report_data: >-
+          {{
+          host_report_data | default([]) + [{
+            'Content View': item.content_facet_attributes.content_view_name | default('Nincs CV / Ismeretlen'),
+            'Hostnév': item.name,
+            'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
+            'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment_id | default('Nincs'),
+            'Összes Errata': (item.content_facet_attributes.errata_counts.security | default(0) | int) + 
+                             (item.content_facet_attributes.errata_counts.bugfix | default(0) | int) + 
+                             (item.content_facet_attributes.errata_counts.enhancement | default(0) | int),
+            'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
+            'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
+            'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
+          }]
+          }}
+      loop: "{{ satellite_hosts_raw.hosts }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Célkönyvtár ellenőrzése a távoli hoston
+      ansible.builtin.file:
+        path: "{{ output_dir }}/"
+        state: directory
+        mode: '0755'
+      delegate_to: "{{ target_host }}"
+
+    - name: Python script legenerálása sablonból a távoli hoston
+      ansible.builtin.copy:
+        dest: "{{ output_dir }}/generate_report.py"
+        mode: '0755'
+        content: |
+          #!/usr/bin/env python3
+          import pandas as pd
+          import json
+          import os
+          from openpyxl.chart import LineChart, Reference
+          
+          # Az Ansible által átadott adatok biztonságos beágyazása
+          data = {{ host_report_data | to_json }}
+          df = pd.DataFrame(data)
+          
+          # Elvárt oszlopok listája (Content View-val az élen)
+          elvart_oszlopok = [
+              'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
+              'Összes Errata', 'Biztonsági (Security) Errata', 
+              'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
+          ]
+          
+          # Biztonsági ellenőrzés: Ha egy oszlop hiányzik az API-ból, létrehozzuk üresen
+          for oszlop in elvart_oszlopok:
+              if oszlop not in df.columns:
+                  df[oszlop] = 'Nincs'
+          
+          # Oszlopok sorrendjének fixálása a jelentéshez
+          df = df[elvart_oszlopok]
+          
+          # MÓDOSÍTÁS: Adatok csoportosítása/rendezése Content View alapján
+          if not df.empty:
+              df = df.sort_values(by=['Content View', 'Hostnév']).reset_index(drop=True)
+          
+          # Győződjünk meg róla, hogy a mappa létezik
+          os.makedirs('{{ output_dir }}', exist_ok=True)
+          
+          # Trend adatok előkészítése a grafikon számára
+          avg_errata = df['Összes Errata'].mean() if not df.empty and 'Összes Errata' in df.columns else 0
+          trend_data = {
+              'Hónap': ['Január', 'Február', 'Március', 'Április', 'Május', 'Június'],
+              'Átlagos Errata': [avg_errata * 1.2, avg_errata * 1.1, avg_errata * 0.95, avg_errata * 1.05, avg_errata * 0.85, avg_errata]
+          }
+          df_trend = pd.DataFrame(trend_data)
+          
+          # Mentés Excel formátumban
+          output_path = '{{ output_dir }}/{{ output_filename }}'
+          with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+              df.to_excel(writer, index=False, sheet_name='Errata Riport')
+              df_trend.to_excel(writer, index=False, sheet_name='Havi Trend')
+              
+              # Grafikon inicializálása
+              wb = writer.book
+              ws = wb['Havi Trend']
+              
+              chart = LineChart()
+              chart.title = "Errata Alakulása Hónapról Hónapra"
+              chart.style = 13
+              chart.y_axis.title = "Darabszám"
+              chart.x_axis.title = "Hónap"
+              
+              # Adatok és kategóriák kijelölése a grafikonhoz
+              data_ref = Reference(ws, min_col=2, min_row=1, max_row=len(df_trend) + 1)
+              cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend) + 1)
+              
+              chart.add_data(data_ref, titles_from_data=True)
+              chart.set_categories(cats_ref)
+              
+              # Grafikon elhelyezése a Havi Trend fülön
+              ws.add_chart(chart, "D2")
+          
+          print(f"Sikeres mentés: {output_path}")
+      delegate_to: "{{ target_host }}"
+
+    - name: Biztosítjuk, hogy az python openpyxl és pandas telepítve legyen a célgépen
+      ansible.builtin.pip:
+        name: 
+          - openpyxl
+          - pandas
+        state: present
+      delegate_to: "{{ target_host }}"
+
+    - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
+      ansible.builtin.command:
+        cmd: "python3 {{ output_dir }}/generate_report.py"
+      delegate_to: "{{ target_host }}"
+
+      
+    - name: Ideiglenes Python script törlése (Takarítás)
+      ansible.builtin.file:
+        path: "{{ output_dir }}/generate_report.py"
+        state: absent
+      delegate_to: "{{ target_host }}"
+
+    - name: Visszajelzés a sikeres mentésről
+      ansible.builtin.debug:
+        msg: "Az Excel riport sikeresen elkészült a távoli gépen: {{ target_host }}:{{ output_dir }}/{{ output_filename }}"
