@@ -123,12 +123,17 @@
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
 
+ #   - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
+ #     ansible.builtin.command:
+ #       cmd: "python3 {{ output_dir }}/generate_report.py"
+ #     register: script_output
+ #     delegate_to: "{{ target_host }}"
+
     - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
       ansible.builtin.command:
         cmd: "python3 {{ output_dir }}/generate_report.py"
-      register: script_output
-      delegate_to: "{{ target_host }}"
-
+      delegate_to: "{{ target_host }}"   # <-- EZT A SORT ADJA HOZZÁ!
+      
     - name: Ideiglenes Python script törlése (Takarítás)
       ansible.builtin.file:
         path: "{{ output_dir }}/generate_report.py"
