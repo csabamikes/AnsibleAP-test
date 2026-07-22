@@ -4,7 +4,7 @@
   gather_facts: false
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
-    satellite_url: "https://satellite-01.example.com"
+    satellite_url: "https://example.com"
     satellite_validate_certs: false
     # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
@@ -72,6 +72,7 @@
           import os
           from openpyxl.chart import LineChart, Reference
           from openpyxl.utils import get_column_letter
+          from openpyxl.styles import PatternFill, Font
 
           json_path = '{{ output_dir }}/satellite_data.json'
           with open(json_path, 'r', encoding='utf-8') as f:
@@ -110,12 +111,24 @@
 
               wb = writer.book
               
-              # --- AUTOMATIKUS OSZLOPSZÉLESSÉG BEÁLLÍTÁS ---
+              # --- STÍLUSOK DEFINIÁLÁSA ---
+              # Világosszürke háttér (Hex kód: D3D3D3) és félkövér betűstílus a fejléchez
+              header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+              header_font = Font(bold=True)
+
+              # --- AUTOMATIKUS FORMATÁLÁS ÉS OSZLOPSZÉLESSÉG ---
               for sheet_name in wb.sheetnames:
                   ws = wb[sheet_name]
+                  
+                  # Fejléc formázása (első sor minden oszlopban)
+                  for cell in ws[1]:
+                      cell.fill = header_fill
+                      cell.font = header_font
+
+                  # Oszlopszélességek igazítása
                   for col in ws.columns:
                       max_len = 0
-                      col_letter = get_column_letter(col[0].column)
+                      col_letter = get_column_letter(col.column)
                       for cell in col:
                           if cell.value is not None:
                               max_len = max(max_len, len(str(cell.value)))
@@ -133,6 +146,7 @@
               cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend) + 1)
               chart.add_data(data_ref, titles_from_data=True, from_rows=False)
               chart.set_categories(cats_ref)
+              
               # Az adatsorok explicit, indexelt elérése és színezése
               # 1. adatsor (B oszlop - Alkalmazott erraták) -> ZÖLD
               s1 = chart.series[0]
@@ -142,11 +156,13 @@
               s1.marker.graphicalProperties.line.solidFill = "228B22"
               
               # 2. adatsor (C oszlop - Észlelt/hiányzó erraták) -> PIROS
-              s2 = chart.series[1]
-              s2.graphicalProperties.line.solidFill = "FF0000" # Piros
-              s2.marker.symbol = "square"
-              s2.marker.graphicalProperties.solidFill = "FF0000"
-              s2.marker.graphicalProperties.line.solidFill = "FF0000"
+              if len(chart.series) > 1:
+                  s2 = chart.series[1]
+                  s2.graphicalProperties.line.solidFill = "FF0000" # Piros
+                  s2.marker.symbol = "square"
+                  s2.marker.graphicalProperties.solidFill = "FF0000"
+                  s2.marker.graphicalProperties.line.solidFill = "FF0000"
+              
               ws.add_chart(chart, "D2")
               print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
