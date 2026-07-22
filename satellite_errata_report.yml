@@ -25,10 +25,10 @@
         host_report_data: >-
           {{
             host_report_data | default([]) + [{
-              'Content View': item.content_facet_attributes.content_view.name | default(item.content_facet.content_view_name) | default(item.content_view_name) | default('Nincs CV / Ismeretlen'),
+              'Content View': item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
               'Hostnév': item.name,
               'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
-              'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment.name | default(item.content_facet.lifecycle_environment_name) | default(item.lifecycle_environment_name) | default('Nincs'),
+              'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
               'Összes Errata': item.content_facet_attributes.errata_counts.total | default(0) | int,
               'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
               'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
