@@ -71,77 +71,84 @@
           import json
           import os
           from openpyxl.chart import LineChart, Reference
-          
+          from openpyxl.utils import get_column_letter
+
           json_path = '{{ output_dir }}/satellite_data.json'
           with open(json_path, 'r', encoding='utf-8') as f:
               data = json.load(f)
-              
+
           df = pd.DataFrame(data)
-          
+
           elvart_oszlopok = [
-          'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
-          'Összes Errata', 'Biztonsági (Security) Errata', 
-          'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
+              'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
+              'Összes Errata', 'Biztonsági (Security) Errata', 
+              'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
           ]
-          
+
           for oszlop in elvart_oszlopok:
               if oszlop not in df.columns:
                   df[oszlop] = 'Nincs'
-                  
+
           df = df[elvart_oszlopok]
-          
+
           if not df.empty:
               df = df.sort_values(by=['Content View', 'Hostnév']).reset_index(drop=True)
-          
+
           os.makedirs('{{ output_dir }}', exist_ok=True)
-          
+
           avg_errata = df['Összes Errata'].mean() if not df.empty and 'Összes Errata' in df.columns else 0
           trend_data = {
-          'Hónap': ['Január', 'Február', 'Március', 'Április', 'Május', 'Június'],
-          'Átlagos Errata': [avg_errata * 1.2, avg_errata * 1.1, avg_errata * 0.95, avg_errata * 1.05, avg_errata * 0.85, avg_errata]
+              'Hónap': ['Január', 'Február', 'Március', 'Április', 'Május', 'Június'],
+              'Átlagos Errata': [avg_errata * 1.2, avg_errata * 1.1, avg_errata * 0.95, avg_errata * 1.05, avg_errata * 0.85, avg_errata]
           }
           df_trend = pd.DataFrame(trend_data)
-          
+
           output_path = '{{ output_dir }}/{{ output_filename }}'
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Riport')
               df_trend.to_excel(writer, index=False, sheet_name='Havi Trend')
-          
+
               wb = writer.book
+              
+              # --- AUTOMATIKUS OSZLOPSZÉLESSÉG BEÁLLÍTÁS ---
+              for sheet_name in wb.sheetnames:
+                  ws = wb[sheet_name]
+                  for col in ws.columns:
+                      max_len = 0
+                      col_letter = get_column_letter(col[0].column)
+                      for cell in col:
+                          if cell.value is not None:
+                              max_len = max(max_len, len(str(cell.value)))
+                      ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
               # A grafikon generálása a Havi Trend munkalapon
               ws = wb['Havi Trend']
- 
               chart = LineChart()
               chart.title = "Havi errata alakulás a hostokon"
               chart.style = 13
               chart.y_axis.title = "Eráták darabszáma"
               chart.x_axis.title = "Időszak"
- 
               # Fontos: min_col=2 és max_col=3 adja át a két adatoszlopot
               data_ref = Reference(ws, min_col=2, max_col=3, min_row=1, max_row=len(df_trend) + 1)
               cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend) + 1)
- 
               chart.add_data(data_ref, titles_from_data=True, from_rows=False)
               chart.set_categories(cats_ref)
- 
               # Az adatsorok explicit, indexelt elérése és színezése
               # 1. adatsor (B oszlop - Alkalmazott erraták) -> ZÖLD
               s1 = chart.series[0]
-              s1.graphicalProperties.line.solidFill = "228B22"  # Erdőzöld
+              s1.graphicalProperties.line.solidFill = "228B22" # Erdőzöld
               s1.marker.symbol = "circle"
               s1.marker.graphicalProperties.solidFill = "228B22"
               s1.marker.graphicalProperties.line.solidFill = "228B22"
-     
+              
               # 2. adatsor (C oszlop - Észlelt/hiányzó erraták) -> PIROS
               s2 = chart.series[1]
-              s2.graphicalProperties.line.solidFill = "FF0000"  # Piros
+              s2.graphicalProperties.line.solidFill = "FF0000" # Piros
               s2.marker.symbol = "square"
               s2.marker.graphicalProperties.solidFill = "FF0000"
               s2.marker.graphicalProperties.line.solidFill = "FF0000"
- 
               ws.add_chart(chart, "D2")
-
-          print(f"Sikeres mentés: {output_path}")
+              print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
 
     - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
