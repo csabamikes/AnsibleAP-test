@@ -110,7 +110,7 @@
               df_trend.to_excel(writer, index=False, sheet_name='Havi Trend')
           
               wb = writer.book
-                # A grafikon generálása a Havi Trend munkalapon
+              # A grafikon generálása a Havi Trend munkalapon
               ws = wb['Havi Trend']
  
               chart = LineChart()
@@ -119,29 +119,30 @@
               chart.y_axis.title = "Eráták darabszáma"
               chart.x_axis.title = "Időszak"
  
-              # Kifejezetten kijelöljük a B és C oszlopokat (min_col=2, max_col=3)
+              # Fontos: min_col=2 és max_col=3 adja át a két adatoszlopot
               data_ref = Reference(ws, min_col=2, max_col=3, min_row=1, max_row=len(df_trend) + 1)
               cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend) + 1)
  
-              # Kényszerítjük az oszlopok szerinti csoportosítást (from_rows=False)
               chart.add_data(data_ref, titles_from_data=True, from_rows=False)
               chart.set_categories(cats_ref)
  
-              # Színek beállítása és markerek (pontok) hozzáadása a vonalakhoz
-              if len(chart.series) >= 2:
-                 # 1. adatsor: Alkalmazott erraták -> ZÖLD
-                 chart.series[0].graphicalProperties.line.solidFill = "228B22"  # Erdőzöld
-                 chart.series[0].marker.symbol = "circle"
-                 chart.series[0].marker.graphicalProperties.solidFill = "228B22"
-         
-                 # 2. adatsor: Észlelt (hiányzó) erraták -> PIROS
-                 chart.series[1].graphicalProperties.line.solidFill = "FF0000"  # Piros
-                 chart.series[1].marker.symbol = "square"
-                 chart.series[1].marker.graphicalProperties.solidFill = "FF0000"
+              # Az adatsorok explicit, indexelt elérése és színezése
+              # 1. adatsor (B oszlop - Alkalmazott erraták) -> ZÖLD
+              s1 = chart.series[0]
+              s1.graphicalProperties.line.solidFill = "228B22"  # Erdőzöld
+              s1.marker.symbol = "circle"
+              s1.marker.graphicalProperties.solidFill = "228B22"
+              s1.marker.graphicalProperties.line.solidFill = "228B22"
+     
+              # 2. adatsor (C oszlop - Észlelt/hiányzó erraták) -> PIROS
+              s2 = chart.series[1]
+              s2.graphicalProperties.line.solidFill = "FF0000"  # Piros
+              s2.marker.symbol = "square"
+              s2.marker.graphicalProperties.solidFill = "FF0000"
+              s2.marker.graphicalProperties.line.solidFill = "FF0000"
  
               ws.add_chart(chart, "D2")
 
-          
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
 
