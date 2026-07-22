@@ -72,6 +72,7 @@
           import pandas as pd
           import json
           import os
+          import openpyxl.utils
           from openpyxl.chart import LineChart, Reference
           
           json_path = '{{ output_dir }}/satellite_data.json'
@@ -103,30 +104,35 @@
           'Átlagos Errata': [avg_errata * 1.2, avg_errata * 1.1, avg_errata * 0.95, avg_errata * 1.05, avg_errata * 0.85, avg_errata]
           }
           df_trend = pd.DataFrame(trend_data)
-          
+
           output_path = '{{ output_dir }}/{{ output_filename }}'
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Riport')
               df_trend.to_excel(writer, index=False, sheet_name='Havi Trend')
-          
-              # JAVÍTÁS: A grafikon generálása visszakerült a lezárás előtti, megfelelő blokkba
+ 
+              # Auto szűrő bekapcsolása az Errata Riport munkalapon
               wb = writer.book
+              ws_report = wb['Errata Riport']
+              # Kijelöljük a teljes adattáblát az A1-es cellától az utolsó oszlop és sor végéig
+              ws_report.auto_filter.ref = f"A1:{openpyxl.utils.get_column_letter(ws_report.max_column)}{ws_report.max_row}"
+ 
+              # A grafikon generálása a Havi Trend munkalapon
               ws = wb['Havi Trend']
-              
+ 
               chart = LineChart()
               chart.title = "Errata Alakulása Hónapról Hónapra"
               chart.style = 13
               chart.y_axis.title = "Darabszám"
               chart.x_axis.title = "Hónap"
-              
+ 
               data_ref = Reference(ws, min_col=2, min_row=1, max_row=len(df_trend) + 1)
               cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_trend) + 1)
-              
+ 
               chart.add_data(data_ref, titles_from_data=True)
               chart.set_categories(cats_ref)
-              
+ 
               ws.add_chart(chart, "D2")
-          
+ 
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
 
