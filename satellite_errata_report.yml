@@ -47,10 +47,11 @@
         mode: '0755'
       delegate_to: "{{ target_host }}"
 
-    - name: Biztosítjuk, hogy a python openpyxl telepítve legyen a célgépen
+    - name: Biztosítjuk, hogy a python openpyxl és pandas telepítve legyen a célgépen
       ansible.builtin.pip:
         name: 
           - openpyxl
+          - pandas
         state: present
       delegate_to: "{{ target_host }}"
 
@@ -67,6 +68,7 @@
         mode: '0755'
         content: |
           #!/usr/bin/env python3
+          import pandas as pd
           import json
           import os
           from openpyxl.utils import get_column_letter
