@@ -67,7 +67,6 @@
         mode: '0755'
         content: |
           #!/usr/bin/env python3
-          import pandas as pd
           import json
           import os
           from openpyxl.utils import get_column_letter
