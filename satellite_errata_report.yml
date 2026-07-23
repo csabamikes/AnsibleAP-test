@@ -107,11 +107,10 @@
                   # Az első sor (fejléc) rögzítése / lefagyasztása
                   ws.freeze_panes = 'A2'
                   
-                  # Helyes iteráció a cellákon a formázáshoz
-                  for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-                      for cell in row:
-                          cell.fill = header_fill
-                          cell.font = header_font
+                  # Kizárólag a legelső sor (fejléc) celláinak formázása szürkére és félkövérre
+                  for cell in ws[1]:
+                      cell.fill = header_fill
+                      cell.font = header_font
                   # Oszlopszélességek igazítása az oszlopindex alapján (1-től indul)
                   for col_idx in range(1, ws.max_column + 1):
                       max_len = 0
