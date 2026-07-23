@@ -8,7 +8,8 @@
     satellite_validate_certs: false
     # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
-    output_filename: "satellite_errata_report.xlsx"
+    # A fájlnév végéhez dinamikusan hozzáfűzzük az aktuális dátumot YYYYMMDD formátumban
+    output_filename: "satellite_errata_report_{{ now(fmt='%Y%m%d') }}.xlsx"
     # --- CÉLHOST (Ahová a riportot menteni kell) ---
     target_host: "rhel9-02" 
   tasks:
@@ -103,17 +104,17 @@
                   # Auto szűrő bekapcsolása a teljes adattáblára az aktuális munkalapon
                   ws.auto_filter.ref = ws.dimensions
                   
-                  # Az első sor (fejléc) rögzítése / lehangolása
+                  # Az első sor (fejléc) rögzítése / lefagyasztása
                   ws.freeze_panes = 'A2'
                   
                   # Csak az első sor (fejléc) celláinak formázása szürkére és félkövérre
-                  for cell in ws[1]:
+                  for cell in ws:
                       cell.fill = header_fill
                       cell.font = header_font
                   # Oszlopszélességek igazítása biztonságos iterálással
                   for col in ws.iter_cols(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
                       max_len = 0
-                      col_letter = get_column_letter(col[0].column)
+                      col_letter = get_column_letter(col.column)
                       for cell in col:
                           if cell.value is not None:
                               max_len = max(max_len, len(str(cell.value)))
