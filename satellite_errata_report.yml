@@ -1,5 +1,5 @@
 ---
-- name: Satellite hostok és errata adatok lekérdezése, Excel riport készítése (Content View bontásban)
+- name: Satellite hostok és errata adatok lekérdezése, Excel report készítése (Content View bontásban)
   hosts: localhost
   gather_facts: false
   vars:
@@ -10,7 +10,7 @@
     output_dir: "/home/ansible/satellite-errata-report"
     # A fájlnév végéhez dinamikusan hozzáfűzzük az aktuális dátumot és időt YYYYMMDD_HHMM formátumban
     output_filename: "satellite_errata_report_{{ now(fmt='%Y%m%d_%H%M') }}.xlsx"
-    # --- CÉLHOST (Ahová a riportot menteni kell) ---
+    # --- CÉLHOST (Ahová a reportot menteni kell) ---
     target_host: "rhel9-02" 
   tasks:
     - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
@@ -21,7 +21,7 @@
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
 
-    - name: Adatok strukturálása és előkészítése a riport számára
+    - name: Adatok strukturálása és előkészítése a report számára
       ansible.builtin.set_fact:
         host_report_data: >-
           {{
@@ -91,7 +91,7 @@
           os.makedirs('{{ output_dir }}', exist_ok=True)
           output_path = '{{ output_dir }}/{{ output_filename }}'
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-              df.to_excel(writer, index=False, sheet_name='Errata Riport')
+              df.to_excel(writer, index=False, sheet_name='Errata Report')
               wb = writer.book
               
               # --- STÍLUSOK DEFINIÁLÁSA ---
@@ -139,4 +139,4 @@
 
     - name: Visszajelzés a sikeres mentésről
       ansible.builtin.debug:
-        msg: "Az Excel riport sikeresen elkészült a távoli gépen: {{ target_host }}:{{ output_dir }}/{{ output_filename }}"
+        msg: "Az Excel report sikeresen elkészült a távoli gépen: {{ target_host }}:{{ output_dir }}/{{ output_filename }}"
