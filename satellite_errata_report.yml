@@ -9,7 +9,7 @@
     # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
     # A fájlnév végéhez dinamikusan hozzáfűzzük az aktuális dátumot és időt YYYYMMDD_HHMM formátumban
-    output_filename: "satellite_errata_report_{{ now(fmt='%Y%m%d_%H%M') }}.xlsx"
+    output_filename: "satellite_errata_report_{{ (ansible.builtin.strftime('%Y%m%d_%H%M') }}.xlsx"
     # --- CÉLHOST (Ahová a reportot menteni kell) ---
     target_host: "rhel9-02" 
   tasks:
