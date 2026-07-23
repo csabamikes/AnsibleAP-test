@@ -47,13 +47,13 @@
         mode: '0755'
       delegate_to: "{{ target_host }}"
 
-    - name: Biztosítjuk, hogy az python openpyxl és pandas telepítve legyen a célgépen
-      ansible.builtin.pip:
-        name: 
-          - openpyxl
+   # - name: Biztosítjuk, hogy az python openpyxl és pandas telepítve legyen a célgépen
+   #   ansible.builtin.pip:
+   #     name: 
+   #       - openpyxl
    #       - pandas
-        state: present
-      delegate_to: "{{ target_host }}"
+   #     state: present
+   #   delegate_to: "{{ target_host }}"
 
     - name: Nyers adatok átmásolása JSON fájlként a távoli hostra
       ansible.builtin.copy:
