@@ -39,7 +39,7 @@
       loop_control:
         label: "{{ item.name }}"
 
-    - name: Célkönyvtár ellenőrzése a távoli hoston
+    - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
         path: "{{ output_dir }}"
         state: directory
