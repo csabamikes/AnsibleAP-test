@@ -1,7 +1,7 @@
 ---
 - name: Satellite hostok és errata adatok lekérdezése, Excel report készítése (Content View bontásban)
   hosts: localhost
-  gather_facts: true
+  gather_facts: false
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
     satellite_url: "https://satellite-01.example.com"
@@ -9,7 +9,7 @@
     # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
     # A fájlnév végéhez dinamikusan hozzáfűzzük az aktuális dátumot és időt YYYYMMDD_HHMM formátumban
-    output_filename: "satellite_errata_report_{{ (ansible_date_time.epoch | int + 7200) | ansible.builtin.strftime('%Y%m%d_%H%M') }}.xlsx"
+    output_filename: "satellite_errata_report_{{ (now() + timedelta(hours=2)).strftime('%Y%m%d_%H%M') }}.xlsx"
     # --- CÉLHOST (Ahová a reportot menteni kell) ---
     target_host: "rhel9-02" 
   tasks:
