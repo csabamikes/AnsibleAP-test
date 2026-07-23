@@ -51,7 +51,7 @@
       ansible.builtin.pip:
         name: 
           - openpyxl
-          - pandas
+   #       - pandas
         state: present
       delegate_to: "{{ target_host }}"
 
