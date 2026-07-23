@@ -1,7 +1,7 @@
 ---
 - name: Satellite hostok és errata adatok lekérdezése, Excel report készítése (Content View bontásban)
   hosts: localhost
-  gather_facts: false
+  gather_facts: true
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
     satellite_url: "https://satellite-01.example.com"
