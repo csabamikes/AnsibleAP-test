@@ -47,11 +47,10 @@
         mode: '0755'
       delegate_to: "{{ target_host }}"
 
-    - name: Biztosítjuk, hogy az python openpyxl és pandas telepítve legyen a célgépen
+    - name: Biztosítjuk, hogy a python openpyxl telepítve legyen a célgépen
       ansible.builtin.pip:
         name: 
           - openpyxl
-  #        - pandas
         state: present
       delegate_to: "{{ target_host }}"
 
