@@ -4,7 +4,7 @@
   gather_facts: false
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
-    satellite_url: "https://example.com"
+    satellite_url: "https://satellite-01.example.com"
     satellite_validate_certs: false
     # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
