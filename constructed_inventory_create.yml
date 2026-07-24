@@ -1,0 +1,162 @@
+---
+- name: Dinamikus csoportok szinkronizálása és Constructed Inventory-k egyeztetése (AWX)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - awx.awx
+
+  vars:
+    # AAP / AWX API Csatlakozási adatok (Élesben Vaultból vagy Credentials-ből jöjjön!)
+    controller_host: "https://192.168.1.185"
+    controller_oauthtoken: "EuV4IA0OlEVkkWu4ekgvtnYasVZWoa"
+
+    organization: "invigor"
+    source_inv_name: "D42 Dynamic - mcs teszt"
+      # source_inv_source_name: "Dinamikus_Source_Neve"
+
+    # Ezt a prefixet tesszük az újonnan generált inventory-k neve elé
+    constructed_prefix: "Constr_"
+
+  tasks:
+    #    - name: 1 Sync Dynamic Source
+    #  awx.awx.inventory_source_update:
+    #    controller_host: "{{ controller_host }}"
+    #    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    #    validate_certs: false
+    #    inventory_source: "{{ source_inv_source_name }}"
+    #    inventory: "{{ source_inv_name }}"
+    #    wait: true
+    - name: 2. Get All Inventories to find ID
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/inventories/"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+          Content-Type: "application/json"
+        validate_certs: false
+        status_code: 200
+      register: all_invs
+
+    - name: 3Csoportok lekerese az API-bol
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/inventories/10/groups/"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+          Content-Type: "application/json"
+        validate_certs: false
+        status_code: 200
+      register: group_list
+
+    - name: 4 Meglevo Constructed inventoryk listazasa
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/inventories/?name__startswith={{ constructed_prefix | urlencode }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+          Content-Type: "application/json"
+        validate_certs: false
+        status_code: 200
+      register: existing_invs
+
+
+    - name: 5. Listak osszeallitasa
+      ansible.builtin.set_fact:
+        target_groups: "{{ group_list.json.results | map(attribute='name') | reject('match', '^(all|ungrouped)$') | list }}"
+        current_invs: "{{ existing_invs.json.results | map(attribute='name') | list }}"
+
+    - name: listazas
+      ansible.builtin.debug:
+        msg: "{{ target_groups }}"
+
+    # Lekérjük az Organization ID-t a neve alapján
+    - name: Get Organization ID by name
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/organizations/?name={{ organization | urlencode }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+        validate_certs: false
+      register: org_lookup
+
+    - name: Set Org ID fact
+      ansible.builtin.set_fact:
+        target_org_id: "{{ org_lookup.json.results[0].id }}"
+
+    # Most már használhatjuk a target_org_id-t a 7-es taskban
+    - name: 7. Create new inventories via API
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/inventories/"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          name: "{{ constructed_prefix }}{{ item }}"
+          organization: "{{ target_org_id }}" # Itt már a kikeresett ID-t használjuk
+          kind: "constructed"
+        status_code: [201, 200]
+        validate_certs: false
+      loop: "{{ target_groups | difference(current_invs | map('regex_replace', '^' + constructed_prefix, '') | list) }}"
+      register: created_invs
+
+# --- 8. SZAKASZ: CONSTRUCTED SOURCE KEZELÉSE ---
+#
+    # 8a. Megkeressük a célnak szánt (üres) inventory-k ID-ját név alapján
+    - name: 8a. Get Target Inventory IDs
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/inventories/?name={{ (constructed_prefix + item) | urlencode }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+        validate_certs: false
+      loop: "{{ target_groups }}"
+      register: target_inv_lookup
+
+    # 8b. Megkeressük a forrás inventory (mcs teszt) ID-ját
+    - name: 8b. Get Main Source Inventory ID
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/inventories/?name={{ source_inv_name | urlencode }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+        validate_certs: false
+      register: main_inv_lookup
+
+    # 8c. Forrás létrehozása és beállítása (PATCH-szerűen, de POST-tal, 2.6-os valid JSON-nal)
+    - name: 8c. Create/Update Constructed Source
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/inventory_sources/"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          name: "Source_{{ item.item }}"
+          # Itt vesszük ki az ID-t a 8a kereséséből
+          inventory: "{{ item.json.results[0].id }}"
+          source: "constructed"
+
+          # AAP 2.6 elvárás: Lista az ID-kból
+          input_inventories:
+            - "{{ main_inv_lookup.json.results[0].id }}"
+
+          # AAP 2.6 elvárás: A source_vars egy VALID JSON string legyen
+          source_vars: "{{ source_vars_dict | to_json }}"
+
+          update_on_launch: true
+          overwrite: true
+        status_code: [201, 200, 400]
+        validate_certs: false
+      vars:
+        source_vars_dict:
+          plugin: "ansible.builtin.constructed"
+          strict: false
+          limit: "{{ item.item }}"
+          groups:
+            "{{ item.item }}": "inventory_hostname in groups['{{ item.item }}']"
+      loop: "{{ target_inv_lookup.results }}"
+      when: item.json.count > 0
