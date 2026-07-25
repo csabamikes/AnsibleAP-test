@@ -21,25 +21,6 @@
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
 
-    - name: Adatok előkészítése és strukturálása (csak a szükséges mezők átadása a Pythonnak)
-      ansible.builtin.set_fact:
-        host_report_data: >-
-          {% set report_list = [] %}
-          {% for host_item in satellite_hosts_raw.hosts %}
-            {% set _ = report_list.append({
-              'id': host_item.id,
-              'Content View': host_item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
-              'Hostnév': host_item.name,
-              'Operációs rendszer': host_item.operatingsystem_name | default('Ismeretlen'),
-              'Környezet (Lifecycle ID)': host_item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
-              'Összes Errata': host_item.content_facet_attributes.errata_counts.total | default(0) | int,
-              'Biztonsági (Security) Errata': (host_item.content_facet_attributes.errata_counts.security | default(0)),
-              'Hibajavító (Bugfix) Errata': (host_item.content_facet_attributes.errata_counts.bugfix | default(0)),
-              'Fejlesztési (Enhancement) Errata': (host_item.content_facet_attributes.errata_counts.enhancement | default(0))
-            }) %}
-          {% endfor %}
-          {{ report_list }}
-
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
         path: "{{ output_dir }}"
@@ -56,10 +37,10 @@
         state: present
       delegate_to: "{{ target_host }}"
 
-    - name: Nyers adatok átmásolása JSON fájlként a távoli hostra
+    - name: Nyers natív Satellite adatok átmásolása tiszta JSON fájlként a távoli hostra
       ansible.builtin.copy:
         dest: "{{ output_dir }}/satellite_data.json"
-        content: "{{ host_report_data | to_json }}"
+        content: "{{ satellite_hosts_raw.hosts | to_json }}"
         mode: '0644'
       delegate_to: "{{ target_host }}"
 
@@ -87,41 +68,57 @@
           password = "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
           
           with open(json_path, 'r', encoding='utf-8') as f:
-              raw_content = f.read()
-              # Biztosítjuk, hogy a beolvasott tartalom tiszta Python lista/szótár legyen
-              try:
-                  hosts_data = json.loads(raw_content)
-                  if isinstance(hosts_data, str):
-                      hosts_data = json.loads(hosts_data)
-              except Exception:
-                  hosts_data = json.loads(raw_content)
+              raw_satellite_hosts = json.load(f)
 
-          # Errata kódok lekérése minden hosthoz az API-ból közvetlenül Pythonból
-          for host in hosts_data:
-              host_id = host['id']
-              api_url = f"{satellite_url}/api/hosts/{host_id}/errata"
-              try:
-                  response = requests.get(api_url, auth=(username, password), verify=False, headers={'Accept': 'application/json'})
-                  if response.status_code == 200:
-                      res_data = response.json()
-                      errata_list = res_data.get('results', []) or res_data.get('resources', [])
-                      advisories = [e.get('errata_number') or e.get('pulp_id') or e.get('id') for e in errata_list if e]
-                      advisories = [str(x) for x in advisories if x]
-                      host['Alkalmazható Erraták (Advisories)'] = ", ".join(advisories) if advisories else "Nincs errata"
-                  else:
-                      host['Alkalmazható Erraták (Advisories)'] = "API Hiba"
-              except Exception as e:
-                  host['Alkalmazható Erraták (Advisories)'] = f"Hiba: {str(e)}"
-              # Kitöröljük az id mezőt, hogy ne kerüljön bele az Excelbe
-              if 'id' in host:
-                  del host['id']
+          hosts_report_list = []
 
-          df = pd.DataFrame(hosts_data)
+          # Adatfeldolgozás és Errata kódok lekérése minden hosthoz az API-ból közvetlenül Pythonból
+          for host_item in raw_satellite_hosts:
+              host_id = host_item.get('id')
+              host_name = host_item.get('name', 'Ismeretlen')
+              
+              # Biztonságos mély adatbeolvasás a facet attribútumokból
+              facet = host_item.get('content_facet_attributes', {}) or {}
+              cv_name = facet.get('content_view', {}).get('name', 'Nincs CV / Ismeretlen') if facet.get('content_view') else 'Nincs CV / Ismeretlen'
+              env_name = facet.get('lifecycle_environment', {}).get('name', 'Nincs') if facet.get('lifecycle_environment') else 'Nincs'
+              errata_counts = facet.get('errata_counts', {}) or {}
+              
+              advisories_str = "Nincs errata"
+              if host_id:
+                  api_url = f"{satellite_url}/api/hosts/{host_id}/errata"
+                  try:
+                      response = requests.get(api_url, auth=(username, password), verify=False, headers={'Accept': 'application/json'})
+                      if response.status_code == 200:
+                          res_data = response.json()
+                          errata_list = res_data.get('results', []) or res_data.get('resources', []) or []
+                          advisories = [e.get('errata_number') or e.get('pulp_id') or e.get('id') for e in errata_list if e]
+                          advisories = [str(x) for x in advisories if x]
+                          if advisories:
+                              advisories_str = ", ".join(advisories)
+                      else:
+                          advisories_str = "API Hiba"
+                  except Exception as e:
+                      advisories_str = f"Hiba: {str(e)}"
+
+              hosts_report_list.append({
+                  'Content View': cv_name,
+                  'Hostnév': host_name,
+                  'Alkalmazható Erraták (Advisories)': advisories_str,
+                  'Operációs rendszer': host_item.get('operatingsystem_name', 'Ismeretlen'),
+                  'Környezet (Lifecycle ID)': env_name,
+                  'Összes Errata': int(errata_counts.get('total', 0)),
+                  'Biztonsági (Security) Errata': int(errata_counts.get('security', 0)),
+                  'Hibajavító (Bugfix) Errata': int(errata_counts.get('bugfix', 0)),
+                  'Fejlesztési (Enhancement) Errata': int(errata_counts.get('enhancement', 0))
+              })
+
+          df = pd.DataFrame(hosts_report_list)
           elvart_oszlopok = [
               'Content View', 'Hostnév', 'Alkalmazható Erraták (Advisories)', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
               'Összes Errata', 'Biztonsági (Security) Errata', 
               'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
           ]
+          
           for oszlop in elvart_oszlopok:
               if oszlop not in df.columns:
                   df[oszlop] = 'Nincs'
@@ -143,7 +140,7 @@
           header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
           header_font = Font(bold=True)
           
-          # Kizárólag a legelső sor celláinak színezése
+          # KIZÁRÓLAG az első sor (fejléc) celláinak színezése és formázása
           for cell in ws[1]:
               cell.fill = header_fill
               cell.font = header_font
