@@ -24,24 +24,21 @@
     - name: Adatok strukturálása és előkészítése a report számára
       ansible.builtin.set_fact:
         host_report_data: >-
-          {{
-          host_report_data | default([]) + [{
-          'Content View': item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
-          'Hostnév': item.name,
-          'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
-          'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
-          'Összes Errata': item.content_facet_attributes.errata_counts.total | default(0) | int,
-          'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
-          'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
-          'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0)),
-          'Security Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'security') | map(attribute='pulp_id') | join(', ') | default('Nincs'),
-          'Bugfix Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'bugfix') | map(attribute='pulp_id') | join(', ') | default('Nincs'),
-          'Enhancement Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'enhancement') | map(attribute='pulp_id') | join(', ') | default('Nincs')
-          }]
-          }}
-        loop: "{{ satellite_hosts_raw.hosts }}"
-        loop_control:
-          label: "{{ item.name }}"
+          [% for host_item in satellite_hosts_raw.hosts %]
+          {
+            "Content View": "{{ host_item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen') }}",
+            "Hostnév": "{{ host_item.name }}",
+            "Operációs rendszer": "{{ host_item.operatingsystem_name | default('Ismeretlen') }}",
+            "Környezet (Lifecycle ID)": "{{ host_item.content_facet_attributes.lifecycle_environment.name | default('Nincs') }}",
+            "Összes Errata": {{ host_item.content_facet_attributes.errata_counts.total | default(0) | int }},
+            "Biztonsági (Security) Errata": {{ host_item.content_facet_attributes.errata_counts.security | default(0) }},
+            "Hibajavító (Bugfix) Errata": {{ host_item.content_facet_attributes.errata_counts.bugfix | default(0) }},
+            "Fejlesztési (Enhancement) Errata": {{ host_item.content_facet_attributes.errata_counts.enhancement | default(0) }},
+            "Security Errata IDs": "{{ host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'security') | map(attribute='pulp_id') | join(', ') | default('Nincs') }}",
+            "Bugfix Errata IDs": "{{ host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'bugfix') | map(attribute='pulp_id') | join(', ') | default('Nincs') }}",
+            "Enhancement Errata IDs": "{{ host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'enhancement') | map(attribute='pulp_id') | join(', ') | default('Nincs') }}"
+          }{% if not loop.last %},{% endif %}
+          [% endfor %]
 
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
@@ -79,6 +76,11 @@
           json_path = '{{ output_dir }}/satellite_data.json'
           with open(json_path, 'r', encoding='utf-8') as f:
               data = json.load(f)
+          
+          # Ha a beérkező adat string formátumú JSON, parse-oljuk újra listává
+          if isinstance(data, str):
+              data = json.loads(data)
+              
           df = pd.DataFrame(data)
           elvart_oszlopok = [
               'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
