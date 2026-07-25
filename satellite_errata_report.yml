@@ -44,7 +44,7 @@
         mode: '0644'
       delegate_to: "{{ target_host }}"
 
-    - name: Python script legenerálása (API errata adatok közvetlen lekérése lapozás nélkül és Excel formázás sortöréssel)
+    - name: Python script legenerálása (API errata adatok közvetlen lekérése lapozás nélkül, fix sormagasság)
       ansible.builtin.copy:
         dest: "{{ output_dir }}/generate_report.py"
         mode: '0755'
@@ -93,7 +93,6 @@
                           advisories = [e.get('errata_number') or e.get('pulp_id') or e.get('id') for e in errata_list if e]
                           advisories = [str(x) for x in advisories if x]
                           if advisories:
-                              # Az Excel cellán belüli szebb sortörés érdekében vessző és szóköz után tördelünk
                               advisories_str = ", ".join(advisories)
                       else:
                           advisories_str = "API Hiba"
@@ -140,17 +139,19 @@
           header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
           header_font = Font(bold=True)
           
-          # Sortörés definíciója felülre igazítással
-          wrap_alignment = Alignment(wrap_text=True, vertical='top')
+          # Sortörés engedélyezése, de a fix magasság miatt nem fogja szétnyomni a sort
+          wrap_alignment = Alignment(wrap_text=True, vertical='center')
           
-          # Stílusok és sortörések alkalmazása a cellákra
-          for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-              for cell in row:
-                  if cell.row == 1:
+          # Stílusok alkalmazása és sormagasság fixálása
+          for row_idx in range(1, ws.max_row + 1):
+              # Fix sormagasság beállítása (20pt ideális az 1 soros megjelenéshez)
+              ws.row_dimensions[row_idx].height = 20
+              for col_idx in range(1, ws.max_column + 1):
+                  cell = ws.cell(row=row_idx, column=col_idx)
+                  if row_idx == 1:
                       cell.fill = header_fill
                       cell.font = header_font
                   else:
-                      # Minden adatsorra bekapcsoljuk a cellán belüli sortörést
                       cell.alignment = wrap_alignment
               
           # Oszlopszélességek igazítása
@@ -158,11 +159,9 @@
               col_letter = get_column_letter(col_idx)
               header_value = ws.cell(row=1, column=col_idx).value
               
-              # Ha ez az Errata oszlop, fix szélességet adunk neki, hogy működjön rajta a sortörés
               if header_value == 'Alkalmazható Erraták (Advisories)':
                   ws.column_dimensions[col_letter].width = 45
               else:
-                  # A többi oszlop marad automatikusan méretezve
                   max_len = 0
                   for row_idx in range(1, ws.max_row + 1):
                       cell_value = ws.cell(row=row_idx, column=col_idx).value
