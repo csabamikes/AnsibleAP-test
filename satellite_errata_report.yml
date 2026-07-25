@@ -144,8 +144,8 @@
           
           # Stílusok alkalmazása és sormagasság fixálása
           for row_idx in range(1, ws.max_row + 1):
-              # Fix sormagasság beállítása (12pt ideális az 1 soros megjelenéshez)
-              ws.row_dimensions[row_idx].height = 12
+              # Fix sormagasság beállítása (15pt ideális az 1 soros megjelenéshez)
+              ws.row_dimensions[row_idx].height = 15
               for col_idx in range(1, ws.max_column + 1):
                   cell = ws.cell(row=row_idx, column=col_idx)
                   if row_idx == 1:
