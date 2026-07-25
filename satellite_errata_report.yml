@@ -41,11 +41,24 @@
           {% set report_list = [] %}
           {% for host_item in satellite_hosts_raw.hosts %}
             {% set errata_match = satellite_hosts_errata_raw.results | selectattr('item.id', 'equalto', host_item.id) | first %}
-            {% set advisories = errata_match.resources | default([]) | map(attribute='pulp_id') | list | join(', ') if errata_match else 'Nincs errata' %}
+            {% set raw_errata = [] %}
+            {% if errata_match and errata_match.resources is defined %}
+              {% set raw_errata = errata_match.resources %}
+            {% elif errata_match and errata_match.response is defined and errata_match.response.results is defined %}
+              {% set raw_errata = errata_match.response.results %}
+            {% endif %}
+            {% set advisories_list = [] %}
+            {% for errata_item in raw_errata %}
+              {% set id_val = errata_item.errata_number | default(errata_item.pulp_id) | default(errata_item.id) | default('') %}
+              {% if id_val != '' and id_val not in advisories_list %}
+                {% set _ = advisories_list.append(id_val) %}
+              {% endif %}
+            {% endfor %}
+            {% set advisories_str = advisories_list | join(', ') %}
             {% set _ = report_list.append({
               'Content View': host_item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
               'Hostnév': host_item.name,
-              'Alkalmazható Erraták (Advisories)': advisories if advisories != '' else 'Nincs errata',
+              'Alkalmazható Erraták (Advisories)': advisories_str if advisories_str != '' else 'Nincs errata',
               'Operációs rendszer': host_item.operatingsystem_name | default('Ismeretlen'),
               'Környezet (Lifecycle ID)': host_item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
               'Összes Errata': host_item.content_facet_attributes.errata_counts.total | default(0) | int,
