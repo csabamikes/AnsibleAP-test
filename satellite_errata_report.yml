@@ -66,9 +66,9 @@
 # Satellite 6.16
 # ============================================================
 
-- name: Store Satellite host id
-  set_fact:
-    satellite_host_id: "{{ host_info.json.id }}"
+  - name: Store Satellite host id
+    set_fact:
+      satellite_host_id: "{{ host_info.json.id }}"
 
 
 # ------------------------------------------------------------
@@ -76,99 +76,99 @@
 # GET /api/hosts/<host_id>/errata
 # ------------------------------------------------------------
 
-- name: Get host errata list from Satellite
-  uri:
-    url: "{{ satellite_url }}/api/hosts/{{ satellite_host_id }}/errata"
-    method: GET
-    user: "{{ satellite_user }}"
-    password: "{{ satellite_password }}"
-    force_basic_auth: yes
-    validate_certs: no
-    return_content: yes
-    headers:
-      Accept: "application/json"
-  register: host_errata
+  - name: Get host errata list from Satellite
+    uri:
+      url: "{{ satellite_url }}/api/hosts/{{ satellite_host_id }}/errata"
+      method: GET
+      user: "{{ satellite_user }}"
+      password: "{{ satellite_password }}"
+      force_basic_auth: yes
+      validate_certs: no
+      return_content: yes
+      headers:
+        Accept: "application/json"
+    register: host_errata
 
 
 # ------------------------------------------------------------
 # Security advisory-k kigyűjtése
 # ------------------------------------------------------------
 
-- name: Collect security errata
-  set_fact:
-    security_errata: >-
-      {{
-        host_errata.json.results
-        | selectattr('type', 'equalto', 'security')
-        | map(attribute='errata_id')
-        | list
-      }}
+  - name: Collect security errata
+    set_fact:
+     security_errata: >-
+        {{
+          host_errata.json.results
+          | selectattr('type', 'equalto', 'security')
+          | map(attribute='errata_id')
+          | list
+        }}
 
 
 # ------------------------------------------------------------
 # Bugfix advisory-k kigyűjtése
 # ------------------------------------------------------------
 
-- name: Collect bugfix errata
-  set_fact:
-    bugfix_errata: >-
-      {{
-        host_errata.json.results
-        | selectattr('type', 'equalto', 'bugfix')
-        | map(attribute='errata_id')
-        | list
-      }}
+  - name: Collect bugfix errata
+    set_fact:
+      bugfix_errata: >-
+        {{
+          host_errata.json.results
+          | selectattr('type', 'equalto', 'bugfix')
+          | map(attribute='errata_id')
+          | list
+        }}
 
 
 # ------------------------------------------------------------
 # Enhancement advisory-k kigyűjtése
 # ------------------------------------------------------------
 
-- name: Collect enhancement errata
-  set_fact:
-    enhancement_errata: >-
-      {{
-        host_errata.json.results
-        | selectattr('type', 'equalto', 'enhancement')
-        | map(attribute='errata_id')
-        | list
-      }}
+  - name: Collect enhancement errata
+    set_fact:
+      enhancement_errata: >-
+        {{
+          host_errata.json.results
+          | selectattr('type', 'equalto', 'enhancement')
+          | map(attribute='errata_id')
+          | list
+        }}
 
 
 # ------------------------------------------------------------
 # Host riport objektum bővítése
 # ------------------------------------------------------------
 
-- name: Build host report data
-  set_fact:
-    host_report_data:
-      hostname: "{{ host_info.json.name }}"
+  - name: Build host report data
+    set_fact:
+      host_report_data:
+        hostname: "{{ host_info.json.name }}"
 
-      host_id: "{{ satellite_host_id }}"
+        host_id: "{{ satellite_host_id }}"
 
-      operating_system: >-
-        {{ host_info.json.operatingsystem_name | default('unknown') }}
+        operating_system: >-
+          {{ host_info.json.operatingsystem_name | default('unknown') }}
 
-      errata_total: >-
-        {{ host_info.json.errata_counts.total | default(0) }}
+        errata_total: >-
+          {{ host_info.json.errata_counts.total | default(0) }}
 
-      security_errata:
-        "{{ security_errata }}"
+        security_errata:
+          "{{ security_errata }}"
 
-      bugfix_errata:
-        "{{ bugfix_errata }}"
+        bugfix_errata:
+          "{{ bugfix_errata }}"
 
-      enhancement_errata:
-        "{{ enhancement_errata }}"
+        enhancement_errata:
+          "{{ enhancement_errata }}"
 
 
 # ------------------------------------------------------------
 # Debug ellenőrzés (később kikapcsolható)
 # ------------------------------------------------------------
 
-- name: Show generated host report data
-  debug:
-    var: host_report_data
+  - name: Show generated host report data
+    debug:
+      var: host_report_data
 
 
     # ============================================================
@@ -181,7 +181,7 @@
 # Egyedi host riport hozzáadása a globális listához
 # ------------------------------------------------------------
 
-- name: Append host report data to report list
+  - name: Append host report data to report list
   set_fact:
     host_reports: >-
       {{
@@ -193,42 +193,42 @@
 # Ellenőrzés - összes feldolgozott host
 # ------------------------------------------------------------
 
-- name: Show collected host reports
-  debug:
-    msg:
-      total_hosts: "{{ host_reports | length }}"
-      reports: "{{ host_reports }}"
+  - name: Show collected host reports
+    debug:
+      msg:
+        total_hosts: "{{ host_reports | length }}"
+        reports: "{{ host_reports }}"
 
 
 # ============================================================
 # Python export számára előkészített struktúra
 # ============================================================
 
-- name: Prepare Excel export data
-  set_fact:
-    excel_report_data: "{{ host_reports }}"
+  - name: Prepare Excel export data
+    set_fact:
+      excel_report_data: "{{ host_reports }}"
 
 
 # ------------------------------------------------------------
 # Opcionális: JSON fájl mentése Python feldolgozáshoz
 # ------------------------------------------------------------
 
-- name: Save report data as JSON
-  copy:
-    content: "{{ excel_report_data | to_nice_json }}"
-    dest: "/tmp/satellite_host_errata_report.json"
+  - name: Save report data as JSON
+    copy:
+      content: "{{ excel_report_data | to_nice_json }}"
+      dest: "/tmp/satellite_host_errata_report.json"
 
 
 # ------------------------------------------------------------
 # Python export script meghívása
 # ------------------------------------------------------------
 
-- name: Generate Excel report
-  command:
-    cmd: >
-      python3 /opt/scripts/satellite_errata_report.py
-      /tmp/satellite_host_errata_report.json
-      /tmp/satellite_host_errata_report.xlsx
+  - name: Generate Excel report
+    command:
+      cmd: >
+        python3 /opt/scripts/satellite_errata_report.py
+        /tmp/satellite_host_errata_report.json
+        /tmp/satellite_host_errata_report.xlsx
 
       # ============================================================
 # 3. rész - Host riport lista összeállítása
@@ -240,28 +240,28 @@
 # Host riport hozzáadása a teljes riport listához
 # ------------------------------------------------------------
 
-- name: Add current host report to report collection
-  set_fact:
-    host_reports: "{{ host_reports | default([]) + [host_report_data] }}"
+  - name: Add current host report to report collection
+    set_fact:
+      host_reports: "{{ host_reports | default([]) + [host_report_data] }}"
 
 
 # ------------------------------------------------------------
 # Riport lista ellenőrzése
 # ------------------------------------------------------------
 
-- name: Display collected host reports
-  debug:
-    var: host_reports
+  - name: Display collected host reports
+    debug:
+      var: host_reports
 
 
 # ------------------------------------------------------------
 # Excel export előkészítő változó
 # ------------------------------------------------------------
 
-- name: Prepare final report dataset
-  set_fact:
-    excel_report_data:
-      hosts: "{{ host_reports }}"
+  - name: Prepare final report dataset
+    set_fact:
+      excel_report_data:
+        hosts: "{{ host_reports }}"
 
 
 # ------------------------------------------------------------
@@ -269,10 +269,10 @@
 # (ezt fogja használni a Python Excel generátor)
 # ------------------------------------------------------------
 
-- name: Write report data for Python exporter
-  copy:
-    content: "{{ excel_report_data | to_nice_json }}"
-    dest: "/tmp/satellite_host_errata_report.json"
+  - name: Write report data for Python exporter
+    copy:
+      content: "{{ excel_report_data | to_nice_json }}"
+      dest: "/tmp/satellite_host_errata_report.json"
 
 
     # ============================================================
@@ -285,67 +285,67 @@
 # Ellenőrizzük, hogy a JSON bemenet elkészült-e
 # ------------------------------------------------------------
 
-- name: Check report JSON file exists
-  stat:
-    path: "/tmp/satellite_host_errata_report.json"
-  register: report_json_file
+  - name: Check report JSON file exists
+    stat:
+      path: "/tmp/satellite_host_errata_report.json"
+    register: report_json_file
 
 
-- name: Fail if JSON report data is missing
-  fail:
-    msg: "A riport JSON fájl nem található!"
-  when:
-    - not report_json_file.stat.exists
+  - name: Fail if JSON report data is missing
+    fail:
+      msg: "A riport JSON fájl nem található!"
+    when:
+      - not report_json_file.stat.exists
 
 
 # ------------------------------------------------------------
 # Python Excel export futtatása
 # ------------------------------------------------------------
 
-- name: Generate Satellite errata Excel report
-  command:
-    cmd: >
-      python3 /opt/scripts/satellite_errata_report.py
-      --input /tmp/satellite_host_errata_report.json
-      --output /tmp/satellite_host_errata_report.xlsx
-  register: excel_generation
+  - name: Generate Satellite errata Excel report
+    command:
+      cmd: >
+        python3 /opt/scripts/satellite_errata_report.py
+        --input /tmp/satellite_host_errata_report.json
+        --output /tmp/satellite_host_errata_report.xlsx
+    register: excel_generation
 
 
 # ------------------------------------------------------------
 # Python futás eredményének ellenőrzése
 # ------------------------------------------------------------
 
-- name: Show Excel generation result
-  debug:
-    var: excel_generation.stdout_lines
+  - name: Show Excel generation result
+    debug:
+      var: excel_generation.stdout_lines
 
 
 # ------------------------------------------------------------
 # Elkészült Excel fájl ellenőrzése
 # ------------------------------------------------------------
 
-- name: Check generated Excel file
-  stat:
-    path: "/tmp/satellite_host_errata_report.xlsx"
-  register: excel_report_file
+  - name: Check generated Excel file
+    stat:
+      path: "/tmp/satellite_host_errata_report.xlsx"
+    register: excel_report_file
 
 
-- name: Fail if Excel report was not created
-  fail:
-    msg: "Az Excel riport létrehozása sikertelen!"
-  when:
-    - not excel_report_file.stat.exists
+  - name: Fail if Excel report was not created
+    fail:
+      msg: "Az Excel riport létrehozása sikertelen!"
+    when:
+      - not excel_report_file.stat.exists
 
 
 # ------------------------------------------------------------
 # Végső információ
 # ------------------------------------------------------------
 
-- name: Report generation completed
-  debug:
-    msg:
-      - "Satellite host errata riport elkészült."
-      - "Fájl: /tmp/satellite_host_errata_report.xlsx"
+  - name: Report generation completed
+    debug:
+      msg:
+        - "Satellite host errata riport elkészült."
+        - "Fájl: /tmp/satellite_host_errata_report.xlsx"
 
       # ============================================================
 # 5. rész - Excel riport lezárása és archiválása
@@ -357,77 +357,77 @@
 # Elkészült Excel riport adatainak lekérése
 # ------------------------------------------------------------
 
-- name: Get generated Excel report information
-  stat:
-    path: "/tmp/satellite_host_errata_report.xlsx"
-  register: final_excel_report
+  - name: Get generated Excel report information
+    stat:
+      path: "/tmp/satellite_host_errata_report.xlsx"
+    register: final_excel_report
 
 
 # ------------------------------------------------------------
 # Excel fájl ellenőrzése
 # ------------------------------------------------------------
 
-- name: Validate Excel report size
-  fail:
-    msg: "Az Excel riport üres vagy hibásan jött létre!"
-  when:
-    - not final_excel_report.stat.exists
-    - final_excel_report.stat.size | int == 0
+  - name: Validate Excel report size
+    fail:
+      msg: "Az Excel riport üres vagy hibásan jött létre!"
+    when:
+      - not final_excel_report.stat.exists
+      - final_excel_report.stat.size | int == 0
 
 
 # ------------------------------------------------------------
 # Végleges riport könyvtár létrehozása
 # ------------------------------------------------------------
 
-- name: Create report archive directory
-  file:
-    path: "/var/reports/satellite"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
+  - name: Create report archive directory
+    file:
+      path: "/var/reports/satellite"
+      state: directory
+      owner: root
+      group: root
+      mode: "0755"
 
 
 # ------------------------------------------------------------
 # Excel riport áthelyezése végleges helyre
 # ------------------------------------------------------------
 
-- name: Store final Satellite errata Excel report
-  copy:
-    src: "/tmp/satellite_host_errata_report.xlsx"
-    dest: "/var/reports/satellite/satellite_host_errata_report.xlsx"
-    remote_src: yes
-    owner: root
-    group: root
-    mode: "0644"
+  - name: Store final Satellite errata Excel report
+    copy:
+      src: "/tmp/satellite_host_errata_report.xlsx"
+      dest: "/var/reports/satellite/satellite_host_errata_report.xlsx"
+      remote_src: yes
+      owner: root
+      group: root
+      mode: "0644"
 
 
 # ------------------------------------------------------------
 # JSON alapadat archiválása (opcionális)
 # ------------------------------------------------------------
 
-- name: Store JSON source data
-  copy:
-    src: "/tmp/satellite_host_errata_report.json"
-    dest: "/var/reports/satellite/satellite_host_errata_report.json"
-    remote_src: yes
-    owner: root
-    group: root
-    mode: "0644"
+  - name: Store JSON source data
+    copy:
+      src: "/tmp/satellite_host_errata_report.json"
+      dest: "/var/reports/satellite/satellite_host_errata_report.json"
+      remote_src: yes
+      owner: root
+      group: root
+      mode: "0644"
 
 
 # ------------------------------------------------------------
 # Végső riport összegzés
 # ------------------------------------------------------------
 
-- name: Display final report summary
-  debug:
-    msg:
-      - "Satellite 6.16 host errata riport elkészült."
-      - "Excel:"
-      - "/var/reports/satellite/satellite_host_errata_report.xlsx"
-      - "Méret:"
-      - "{{ final_excel_report.stat.size }} byte"
+  - name: Display final report summary
+    debug:
+      msg:
+        - "Satellite 6.16 host errata riport elkészült."
+        - "Excel:"
+        - "/var/reports/satellite/satellite_host_errata_report.xlsx"
+        - "Méret:"
+        - "{{ final_excel_report.stat.size }} byte"
 
 
       # ============================================================
@@ -440,98 +440,98 @@
 # Végleges riport fájl jogosultság ellenőrzése
 # ------------------------------------------------------------
 
-- name: Verify final report permissions
-  stat:
-    path: "/var/reports/satellite/satellite_host_errata_report.xlsx"
-  register: final_report_stat
+  - name: Verify final report permissions
+    stat:
+      path: "/var/reports/satellite/satellite_host_errata_report.xlsx"
+    register: final_report_stat
 
 
-- name: Display final report details
-  debug:
-    msg:
-      - "Riport fájl:"
-      - "{{ final_report_stat.stat.path }}"
-      - "Méret:"
-      - "{{ final_report_stat.stat.size }} byte"
-      - "Jogosultság:"
-      - "{{ final_report_stat.stat.mode }}"
+  - name: Display final report details
+    debug:
+      msg:
+        - "Riport fájl:"
+        - "{{ final_report_stat.stat.path }}"
+        - "Méret:"
+        - "{{ final_report_stat.stat.size }} byte"
+        - "Jogosultság:"
+        - "{{ final_report_stat.stat.mode }}"
 
 
 # ------------------------------------------------------------
 # SHA256 ellenőrző összeg készítése
 # ------------------------------------------------------------
 
-- name: Generate SHA256 checksum for Excel report
-  command:
-    cmd: >
-      sha256sum /var/reports/satellite/satellite_host_errata_report.xlsx
-  register: report_checksum
+  - name: Generate SHA256 checksum for Excel report
+    command:
+      cmd: >
+        sha256sum /var/reports/satellite/satellite_host_errata_report.xlsx
+    register: report_checksum
 
 
-- name: Save report checksum
-  copy:
-    content: "{{ report_checksum.stdout }}"
-    dest: "/var/reports/satellite/satellite_host_errata_report.sha256"
-    owner: root
-    group: root
-    mode: "0644"
+  - name: Save report checksum
+    copy:
+      content: "{{ report_checksum.stdout }}"
+      dest: "/var/reports/satellite/satellite_host_errata_report.sha256"
+      owner: root
+      group: root
+      mode: "0644"
 
 
 # ------------------------------------------------------------
 # Ideiglenes fájlok törlése
 # ------------------------------------------------------------
 
-- name: Remove temporary JSON report file
-  file:
-    path: "/tmp/satellite_host_errata_report.json"
-    state: absent
+  - name: Remove temporary JSON report file
+    file:
+      path: "/tmp/satellite_host_errata_report.json"
+      state: absent
 
 
-- name: Remove temporary Excel report file
-  file:
-    path: "/tmp/satellite_host_errata_report.xlsx"
-    state: absent
+  - name: Remove temporary Excel report file
+    file:
+      path: "/tmp/satellite_host_errata_report.xlsx"
+      state: absent
 
 
 # ------------------------------------------------------------
 # Riport futási napló létrehozása
 # ------------------------------------------------------------
 
-- name: Create report execution log
-  copy:
-    content: |
-      Satellite 6.16 Host Errata Report
+  - name: Create report execution log
+    copy:
+      content: |
+        Satellite 6.16 Host Errata Report
 
-      Status: SUCCESS
+        Status: SUCCESS
 
-      Output:
-      /var/reports/satellite/satellite_host_errata_report.xlsx
+        Output:
+        /var/reports/satellite/satellite_host_errata_report.xlsx
 
-      Generated checksum:
-      {{ report_checksum.stdout }}
+        Generated checksum:
+        {{ report_checksum.stdout }}
 
-    dest: "/var/reports/satellite/report_execution.log"
-    owner: root
-    group: root
-    mode: "0644"
+      dest: "/var/reports/satellite/report_execution.log"
+      owner: root
+      group: root
+      mode: "0644"
 
 
 # ------------------------------------------------------------
 # Végső állapot
 # ------------------------------------------------------------
 
-- name: Satellite errata report completed successfully
-  debug:
-    msg:
-      - "=========================================="
-      - "Satellite Errata Report SUCCESS"
-      - "=========================================="
-      - "Excel:"
-      - "/var/reports/satellite/satellite_host_errata_report.xlsx"
-      - "Checksum:"
-      - "/var/reports/satellite/satellite_host_errata_report.sha256"
-      - "Log:"
-      - "/var/reports/satellite/report_execution.log"
+  - name: Satellite errata report completed successfully
+    debug:
+      msg:
+        - "=========================================="
+        - "Satellite Errata Report SUCCESS"
+        - "=========================================="
+        - "Excel:"
+        - "/var/reports/satellite/satellite_host_errata_report.xlsx"
+        - "Checksum:"
+        - "/var/reports/satellite/satellite_host_errata_report.sha256"
+        - "Log:"
+        - "/var/reports/satellite/report_execution.log"
 
 
       # ============================================================
@@ -544,20 +544,20 @@
 # Feldolgozott hostok számának meghatározása
 # ------------------------------------------------------------
 
-- name: Calculate processed host count
-  set_fact:
-    processed_host_count: "{{ host_reports | default([]) | length }}"
+  - name: Calculate processed host count
+    set_fact:
+      processed_host_count: "{{ host_reports | default([]) | length }}"
 
 
 # ------------------------------------------------------------
 # Riport futási információk összeállítása
 # ------------------------------------------------------------
 
-- name: Build report execution summary
-  set_fact:
-    report_summary:
-      report_name: "Satellite Host Errata Report"
-      satellite_version: "6.16"
-      status: "SUCCESS"
-      processed_hosts: "{{ processed_host_count }}"
-      output_file: "/var/reports/satellite/satellite_host_errata_report.xlsx"
+  - name: Build report execution summary
+    set_fact:
+      report_summary:
+        report_name: "Satellite Host Errata Report"
+        satellite_version: "6.16"
+        status: "SUCCESS"
+        processed_hosts: "{{ processed_host_count }}"
+        output_file: "/var/reports/satellite/satellite_host_errata_report.xlsx"
