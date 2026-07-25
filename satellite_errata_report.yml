@@ -4,7 +4,7 @@
   gather_facts: false
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
-    satellite_url: "https://satellite-01.example.com"
+    satellite_url: "https://example.com"
     satellite_validate_certs: false
     # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
@@ -13,7 +13,7 @@
     # --- CÉLHOST (Ahová a reportot menteni kell) ---
     target_host: "rhel9-02" 
   tasks:
-    - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
+    - name: Hostok alapvető adatainak lekérése a Satellite-ból
       redhat.satellite.host_info:
         server_url: "{{ satellite_url }}"
         username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
@@ -21,9 +21,13 @@
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
 
-    - name: Adatok strukturálása és előkészítése a report számára
-      ansible.builtin.set_fact:
-        host_report_data: "{{ satellite_hosts_raw.hosts }}"
+    - name: Konkrét Errata Advisory ID-k lekérése minden hosthoz
+      redhat.satellite.host_errata_info:
+        server_url: "{{ satellite_url }}"
+        username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
+        password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
+        validate_certs: "{{ satellite_validate_certs }}"
+      register: satellite_errata_raw
 
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
@@ -43,7 +47,13 @@
     - name: Nyers adatok átmásolása JSON fájlként a távoli hostra
       ansible.builtin.copy:
         dest: "{{ output_dir }}/satellite_data.json"
-        content: "{{ host_report_data | to_json }}"
+        content: >-
+          {{
+            {
+              'hosts': satellite_hosts_raw.hosts,
+              'errata': satellite_errata_raw.host_errata
+            } | to_json
+          }}
         mode: '0644'
       delegate_to: "{{ target_host }}"
 
@@ -60,24 +70,28 @@
           from openpyxl.styles import PatternFill, Font
           json_path = '{{ output_dir }}/satellite_data.json'
           with open(json_path, 'r', encoding='utf-8') as f:
-              raw_hosts = json.load(f)
+              raw_data = json.load(f)
               
+          hosts_list = raw_data.get('hosts', [])
+          errata_map = raw_data.get('errata', {})
+          
           structured_data = []
-          for item in raw_hosts:
+          for item in hosts_list:
+              hostname = item.get('name', 'Ismeretlen')
               cf_attrs = item.get('content_facet_attributes', {})
               cv_name = cf_attrs.get('content_view', {}).get('name', 'Nincs CV / Ismeretlen')
               le_name = cf_attrs.get('lifecycle_environment', {}).get('name', 'Nincs')
               errata_counts = cf_attrs.get('errata_counts', {})
               
-              # Az applicable_errata vagy errata_status tömbből kinyerjük az Advisory nevet (pl: RHSA-2023:3661)
-              applicable_errata = cf_attrs.get('applicable_errata', [])
-              sec_list = [e.get('name') for e in applicable_errata if e.get('type') == 'security' and e.get('name')]
-              bug_list = [e.get('name') for e in applicable_errata if e.get('type') == 'bugfix' and e.get('name')]
-              enh_list = [e.get('name') for e in applicable_errata if e.get('type') == 'enhancement' and e.get('name')]
+              # Az Advisory ID-kat kikeresük a host_errata_info-ból a hosztnév alapján
+              host_errata_data = errata_map.get(hostname, [])
+              sec_list = [e.get('name') for e in host_errata_data if e.get('type') == 'security' and e.get('name')]
+              bug_list = [e.get('name') for e in host_errata_data if e.get('type') == 'bugfix' and e.get('name')]
+              enh_list = [e.get('name') for e in host_errata_data if e.get('type') == 'enhancement' and e.get('name')]
               
               row = {
                   'Content View': cv_name,
-                  'Hostnév': item.get('name', 'Ismeretlen'),
+                  'Hostnév': hostname,
                   'Operációs rendszer': item.get('operatingsystem_name', 'Ismeretlen'),
                   'Környezet (Lifecycle ID)': le_name,
                   'Összes Errata': int(errata_counts.get('total', 0)),
@@ -124,7 +138,7 @@
               # Az első sor (fejléc) rögzítése / lefagyasztása
               ws.freeze_panes = 'A2'
               
-              # Kizárólag a legelső sor (fejléc) celláinak formázása szürkére és félkövérre
+              # ERDEDETI PONTOS FORMÁZÁS: Kizárólag a legelső sor celláinak formázása szürkére és félkövérre
               for cell in ws[1]:
                   cell.fill = header_fill
                   cell.font = header_font
