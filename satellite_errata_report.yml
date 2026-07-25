@@ -30,20 +30,20 @@
             {% set bug_ids = host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'bugfix') | map(attribute='pulp_id') | join(', ') %}
             {% set enh_ids = host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'enhancement') | map(attribute='pulp_id') | join(', ') %}
             {% set _ = ns.items.append({
-              'Content View': host_item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
-              'Hostnév': host_item.name,
-              'Operációs rendszer': host_item.operatingsystem_name | default('Ismeretlen'),
-              'Környezet (Lifecycle ID)': host_item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
-              'Összes Errata': host_item.content_facet_attributes.errata_counts.total | default(0) | int,
-              'Biztonsági (Security) Errata': host_item.content_facet_attributes.errata_counts.security | default(0),
-              'Hibajavító (Bugfix) Errata': host_item.content_facet_attributes.errata_counts.bugfix | default(0),
-              'Fejlesztési (Enhancement) Errata': host_item.content_facet_attributes.errata_counts.enhancement | default(0),
-              'Security Errata IDs': sec_ids if sec_ids else 'Nincs',
-              'Bugfix Errata IDs': bug_ids if bug_ids else 'Nincs',
-              'Enhancement Errata IDs': enh_ids if enh_ids else 'Nincs'
+              "Content View": host_item.content_facet_attributes.content_view.name | default("Nincs CV / Ismeretlen"),
+              "Hostnév": host_item.name,
+              "Operációs rendszer": host_item.operatingsystem_name | default("Ismeretlen"),
+              "Környezet (Lifecycle ID)": host_item.content_facet_attributes.lifecycle_environment.name | default("Nincs"),
+              "Összes Errata": host_item.content_facet_attributes.errata_counts.total | default(0) | int,
+              "Biztonsági (Security) Errata": host_item.content_facet_attributes.errata_counts.security | default(0),
+              "Hibajavító (Bugfix) Errata": host_item.content_facet_attributes.errata_counts.bugfix | default(0),
+              "Fejlesztési (Enhancement) Errata": host_item.content_facet_attributes.errata_counts.enhancement | default(0),
+              "Security Errata IDs": sec_ids if sec_ids else "Nincs",
+              "Bugfix Errata IDs": bug_ids if bug_ids else "Nincs",
+              "Enhancement Errata IDs": enh_ids if enh_ids else "Nincs"
             }) %}
           {% endfor %}
-          {{ ns.items }}
+          {{ ns.items | to_json }}
 
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
@@ -63,7 +63,7 @@
     - name: Nyers adatok átmásolása JSON fájlként a távoli hostra
       ansible.builtin.copy:
         dest: "{{ output_dir }}/satellite_data.json"
-        content: "{{ host_report_data | to_json }}"
+        content: "{{ host_report_data }}"
         mode: '0644'
       delegate_to: "{{ target_host }}"
 
@@ -81,9 +81,6 @@
           json_path = '{{ output_dir }}/satellite_data.json'
           with open(json_path, 'r', encoding='utf-8') as f:
               data = json.load(f)
-              
-          if isinstance(data, str):
-              data = json.loads(data)
               
           df = pd.DataFrame(data)
           elvart_oszlopok = [
@@ -118,7 +115,7 @@
               ws.freeze_panes = 'A2'
               
               # Kizárólag a legelső sor (fejléc) celláinak formázása szürkére és félkövérre
-              for cell in ws[1]:
+              for cell in ws:
                   cell.fill = header_fill
                   cell.font = header_font
               # Oszlopszélességek igazítása az oszlopindex alapján (1-től indul)
