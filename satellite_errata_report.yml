@@ -13,7 +13,7 @@
     # --- CÉLHOST (Ahová a reportot menteni kell) ---
     target_host: "rhel9-02" 
   tasks:
-    - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
+    - name: Hostok alapvető adatainak lekérése a Satellite-ból
       redhat.satellite.host_info:
         server_url: "{{ satellite_url }}"
         username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
@@ -21,25 +21,38 @@
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
 
-    - name: Adatok strukturálása és előkészítése a report számára
-      ansible.builtin.set_fact:
-        host_report_data: >-
-          {{
-          host_report_data | default([]) + [{
-          'Content View': item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
-          'Hostnév': item.name,
-          'Alkalmazható Erraták (Advisories)': item.applicable_errata | default([]) | list | join(', ') | default('Nincs errata'),
-          'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
-          'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
-          'Összes Errata': item.content_facet_attributes.errata_counts.total | default(0) | int,
-          'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
-          'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
-          'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
-          }]
-          }}
+    - name: Konkrét Errata Advisory azonosítók lekérése minden hosthoz külön-külön
+      theforeman.foreman.host_errata_info:
+        server_url: "{{ satellite_url }}"
+        username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
+        password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
+        validate_certs: "{{ satellite_validate_certs }}"
+        host: "{{ item.name }}"
       loop: "{{ satellite_hosts_raw.hosts }}"
       loop_control:
         label: "{{ item.name }}"
+      register: satellite_hosts_errata_raw
+
+    - name: Adatok strukturálása és összefűzése a report számára
+      ansible.builtin.set_fact:
+        host_report_data: >-
+          {% set report_list = [] %}
+          {% for host_item in satellite_hosts_raw.hosts %}
+            {% set errata_match = satellite_hosts_errata_raw.results | selectattr('item.name', 'equalto', host_item.name) | first %}
+            {% set advisories = errata_match.errata | default({}) | keys | list | join(', ') if (errata_match and errata_match.errata) else 'Nincs errata' %}
+            {% set _ = report_list.append({
+              'Content View': host_item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
+              'Hostnév': host_item.name,
+              'Alkalmazható Erraták (Advisories)': advisories if advisories != '' else 'Nincs errata',
+              'Operációs rendszer': host_item.operatingsystem_name | default('Ismeretlen'),
+              'Környezet (Lifecycle ID)': host_item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
+              'Összes Errata': host_item.content_facet_attributes.errata_counts.total | default(0) | int,
+              'Biztonsági (Security) Errata': (host_item.content_facet_attributes.errata_counts.security | default(0)),
+              'Hibajavító (Bugfix) Errata': (host_item.content_facet_attributes.errata_counts.bugfix | default(0)),
+              'Fejlesztési (Enhancement) Errata': (host_item.content_facet_attributes.errata_counts.enhancement | default(0))
+            }) %}
+          {% endfor %}
+          {{ report_list }}
 
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
@@ -97,30 +110,28 @@
           if not df.empty:
               df = df.sort_values(by=['Content View', 'Hostnév']).reset_index(drop=True)
               
-          # 1. LÉPÉS: A Pandas elmenti a tiszta adatokat az Excelbe és TELJESEN bezárja a fájlt
+          # 1. LÉPÉS: Nyers adatok elmentése Pandas-al
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Report')
           
-          # 2. LÉPÉS: Az openpyxl-lel újra megnyitjuk a kész Excel fájlt, így a formázás biztosan megmarad
+          # 2. LÉPÉS: Excel újranyitása openpyxl-lel az utólagos formázásokhoz
           wb = openpyxl.load_workbook(output_path)
           ws = wb['Errata Report']
           
-          # Auto szűrő bekapcsolása a tartományra
+          # Auto szűrő és rögzítés bekapcsolása
           ws.auto_filter.ref = ws.dimensions
-          
-          # Első sor rögzítése
           ws.freeze_panes = 'A2'
           
-          # Stílusok beállítása
+          # Stílusok létrehozása a fejléchez
           header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
           header_font = Font(bold=True)
           
-          # KIZÁRÓLAG az első sor (fejléc) celláinak formázása szürkére és félkövérre
+          # Kizárólag a legelső sor formázása szürkére és félkövérre
           for cell in ws[1]:
               cell.fill = header_fill
               cell.font = header_font
               
-          # Oszlopszélességek automatikus igazítása
+          # Oszlopszélességek igazítása automatikusan
           for col_idx in range(1, ws.max_column + 1):
               max_len = 0
               col_letter = get_column_letter(col_idx)
@@ -128,10 +139,9 @@
                   cell_value = ws.cell(row=row_idx, column=col_idx).value
                   if cell_value is not None:
                       max_len = max(max_len, len(str(cell_value)))
-              # +5 puffer az Excel szűrő ikonok kitakarása ellen
+              # +5 puffer az Excel auto szűrő nyilak kitakarása ellen
               ws.column_dimensions[col_letter].width = max(max_len + 5, 15)
               
-          # Változtatások mentése
           wb.save(output_path)
           wb.close()
           print(f"Sikeres mentés és formázás: {output_path}")
