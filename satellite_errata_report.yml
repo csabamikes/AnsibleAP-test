@@ -61,6 +61,10 @@
 #
 ##############################################################################
 
+    - name: Debug host_info content
+      debug:
+        var: host_info
+
 # ============================================================
 # 2. rész - Host Errata API lekérés és kategorizálás
 # Satellite 6.16
