@@ -72,11 +72,17 @@
           import pandas as pd
           import json
           import os
+          import openpyxl
           from openpyxl.utils import get_column_letter
           from openpyxl.styles import PatternFill, Font
+          
           json_path = '{{ output_dir }}/satellite_data.json'
+          output_path = '{{ output_dir }}/{{ output_filename }}'
+          os.makedirs('{{ output_dir }}', exist_ok=True)
+          
           with open(json_path, 'r', encoding='utf-8') as f:
               data = json.load(f)
+              
           df = pd.DataFrame(data)
           elvart_oszlopok = [
               'Content View', 'Hostnév', 'Alkalmazható Erraták (Advisories)', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
@@ -87,42 +93,48 @@
               if oszlop not in df.columns:
                   df[oszlop] = 'Nincs'
           df = df[elvart_oszlopok]
+          
           if not df.empty:
               df = df.sort_values(by=['Content View', 'Hostnév']).reset_index(drop=True)
-          os.makedirs('{{ output_dir }}', exist_ok=True)
-          output_path = '{{ output_dir }}/{{ output_filename }}'
+              
+          # 1. LÉPÉS: A Pandas elmenti a tiszta adatokat az Excelbe és TELJESEN bezárja a fájlt
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Report')
-              wb = writer.book
           
-          # --- STÍLUSOK DEFINIÁLÁSA ---
+          # 2. LÉPÉS: Az openpyxl-lel újra megnyitjuk a kész Excel fájlt, így a formázás biztosan megmarad
+          wb = openpyxl.load_workbook(output_path)
+          ws = wb['Errata Report']
+          
+          # Auto szűrő bekapcsolása a tartományra
+          ws.auto_filter.ref = ws.dimensions
+          
+          # Első sor rögzítése
+          ws.freeze_panes = 'A2'
+          
+          # Stílusok beállítása
           header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
           header_font = Font(bold=True)
-          # --- AUTOMATIKUS FORMATÁLÁS ÉS OSZLOPSZÉLESSÉG ---
-          for sheet_name in wb.sheetnames:
-              ws = wb[sheet_name]
+          
+          # KIZÁRÓLAG az első sor (fejléc) celláinak formázása szürkére és félkövérre
+          for cell in ws[1]:
+              cell.fill = header_fill
+              cell.font = header_font
               
-              # Auto szűrő bekapcsolása a teljes adattáblára az aktuális munkalapon
-              ws.auto_filter.ref = ws.dimensions
+          # Oszlopszélességek automatikus igazítása
+          for col_idx in range(1, ws.max_column + 1):
+              max_len = 0
+              col_letter = get_column_letter(col_idx)
+              for row_idx in range(1, ws.max_row + 1):
+                  cell_value = ws.cell(row=row_idx, column=col_idx).value
+                  if cell_value is not None:
+                      max_len = max(max_len, len(str(cell_value)))
+              # +5 puffer az Excel szűrő ikonok kitakarása ellen
+              ws.column_dimensions[col_letter].width = max(max_len + 5, 15)
               
-              # Az első sor (fejléc) rögzítése / lefagyasztása
-              ws.freeze_panes = 'A2'
-              
-              # Kizárólag a legelső sor (fejléc) celláinak formázása szürkére és félkövérre
-              for cell in ws[1]:
-                  cell.fill = header_fill
-                  cell.font = header_font
-              # Oszlopszélességek igazítása az oszlopindex alapján (1-től indul)
-              for col_idx in range(1, ws.max_column + 1):
-                  max_len = 0
-                  col_letter = get_column_letter(col_idx)
-                  for row_idx in range(1, ws.max_row + 1):
-                      cell_value = ws.cell(row=row_idx, column=col_idx).value
-                      if cell_value is not None:
-                          max_len = max(max_len, len(str(cell_value)))
-                  # +5 karakter puffer biztosítja, hogy az auto szűrő ikonja se takarja el a cella tartalmát
-                  ws.column_dimensions[col_letter].width = max(max_len + 5, 15)
-          print(f"Sikeres mentés: {output_path}")
+          # Változtatások mentése
+          wb.save(output_path)
+          wb.close()
+          print(f"Sikeres mentés és formázás: {output_path}")
       delegate_to: "{{ target_host }}"
 
     - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
