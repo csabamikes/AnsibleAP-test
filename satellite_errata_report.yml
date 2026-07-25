@@ -21,44 +21,15 @@
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
 
-    - name: Konkrét Errata azonosítók (Advisories) lekérdezése beépített API erőforráson keresztül
-      redhat.satellite.resource_info:
-        server_url: "{{ satellite_url }}"
-        username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
-        password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
-        validate_certs: "{{ satellite_validate_certs }}"
-        resource: hosts
-        subresource: errata
-        resource_id: "{{ item.id }}"
-      loop: "{{ satellite_hosts_raw.hosts }}"
-      loop_control:
-        label: "{{ item.name }}"
-      register: satellite_hosts_errata_raw
-
-    - name: Adatok strukturálása és összefűzése a report számára
+    - name: Adatok előkészítése és strukturálása (csak a szükséges mezők átadása a Pythonnak)
       ansible.builtin.set_fact:
         host_report_data: >-
           {% set report_list = [] %}
           {% for host_item in satellite_hosts_raw.hosts %}
-            {% set errata_match = satellite_hosts_errata_raw.results | selectattr('item.id', 'equalto', host_item.id) | first %}
-            {% set raw_errata = [] %}
-            {% if errata_match and errata_match.resources is defined %}
-              {% set raw_errata = errata_match.resources %}
-            {% elif errata_match and errata_match.response is defined and errata_match.response.results is defined %}
-              {% set raw_errata = errata_match.response.results %}
-            {% endif %}
-            {% set advisories_list = [] %}
-            {% for errata_item in raw_errata %}
-              {% set id_val = errata_item.errata_number | default(errata_item.pulp_id) | default(errata_item.id) | default('') %}
-              {% if id_val != '' and id_val not in advisories_list %}
-                {% set _ = advisories_list.append(id_val) %}
-              {% endif %}
-            {% endfor %}
-            {% set advisories_str = advisories_list | join(', ') %}
             {% set _ = report_list.append({
+              'id': host_item.id,
               'Content View': host_item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
               'Hostnév': host_item.name,
-              'Alkalmazható Erraták (Advisories)': advisories_str if advisories_str != '' else 'Nincs errata',
               'Operációs rendszer': host_item.operatingsystem_name | default('Ismeretlen'),
               'Környezet (Lifecycle ID)': host_item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
               'Összes Errata': host_item.content_facet_attributes.errata_counts.total | default(0) | int,
@@ -76,11 +47,12 @@
         mode: '0755'
       delegate_to: "{{ target_host }}"
 
-    - name: Biztosítjuk, hogy a python openpyxl és pandas telepítve legyen a célgépen
+    - name: Biztosítjuk, hogy a python openpyxl, pandas és requests telepítve legyen a célgépnek
       ansible.builtin.pip:
         name: 
           - openpyxl
           - pandas
+          - requests
         state: present
       delegate_to: "{{ target_host }}"
 
@@ -91,7 +63,7 @@
         mode: '0644'
       delegate_to: "{{ target_host }}"
 
-    - name: Python script legenerálása a távoli hoston (Adatbeolvasás JSON-ből)
+    - name: Python script legenerálása (API errata adatok közvetlen lekérése és Excel formázás)
       ansible.builtin.copy:
         dest: "{{ output_dir }}/generate_report.py"
         mode: '0755'
@@ -100,18 +72,44 @@
           import pandas as pd
           import json
           import os
+          import requests
           import openpyxl
           from openpyxl.utils import get_column_letter
           from openpyxl.styles import PatternFill, Font
-          
+          import urllib3
+          urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
           json_path = '{{ output_dir }}/satellite_data.json'
           output_path = '{{ output_dir }}/{{ output_filename }}'
-          os.makedirs('{{ output_dir }}', exist_ok=True)
+          
+          satellite_url = "{{ satellite_url }}"
+          username = "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
+          password = "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
           
           with open(json_path, 'r', encoding='utf-8') as f:
-              data = json.load(f)
-              
-          df = pd.DataFrame(data)
+              hosts_data = json.load(f)
+
+          # Errata kódok lekérése minden hosthoz az API-ból közvetlenül Pythonból
+          for host in hosts_data:
+              host_id = host['id']
+              api_url = f"{satellite_url}/api/hosts/{host_id}/errata"
+              try:
+                  response = requests.get(api_url, auth=(username, password), verify=False, headers={'Accept': 'application/json'})
+                  if response.status_code == 200:
+                      res_data = response.json()
+                      errata_list = res_data.get('results', []) or res_data.get('resources', [])
+                      advisories = [e.get('errata_number') or e.get('pulp_id') or e.get('id') for e in errata_list if e]
+                      advisories = [str(x) for x in advisories if x]
+                      host['Alkalmazható Erraták (Advisories)'] = ", ".join(advisories) if advisories else "Nincs errata"
+                  else:
+                      host['Alkalmazható Erraták (Advisories)'] = "API Hiba"
+              except Exception as e:
+                  host['Alkalmazható Erraták (Advisories)'] = f"Hiba: {str(e)}"
+              # Kitöröljük az id mezőt, hogy ne kerüljön bele az Excelbe
+              if 'id' in host:
+                  del host['id']
+
+          df = pd.DataFrame(hosts_data)
           elvart_oszlopok = [
               'Content View', 'Hostnév', 'Alkalmazható Erraták (Advisories)', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
               'Összes Errata', 'Biztonsági (Security) Errata', 
@@ -125,28 +123,23 @@
           if not df.empty:
               df = df.sort_values(by=['Content View', 'Hostnév']).reset_index(drop=True)
               
-          # 1. LÉPÉS: Nyers adatok elmentése Pandas-al
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Report')
           
-          # 2. LÉPÉS: Excel újranyitása openpyxl-lel az utólagos formázásokhoz
+          # --- Excel utólagos formázása openpyxl-lel ---
           wb = openpyxl.load_workbook(output_path)
           ws = wb['Errata Report']
           
-          # Auto szűrő és rögzítés bekapcsolása
           ws.auto_filter.ref = ws.dimensions
           ws.freeze_panes = 'A2'
           
-          # Stílusok létrehozása a fejléchez
           header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
           header_font = Font(bold=True)
           
-          # Kizárólag a legelső sor formázása szürkére és félkövérre
           for cell in ws[1]:
               cell.fill = header_fill
               cell.font = header_font
               
-          # Oszlopszélességek igazítása automatikusan
           for col_idx in range(1, ws.max_column + 1):
               max_len = 0
               col_letter = get_column_letter(col_idx)
@@ -154,7 +147,6 @@
                   cell_value = ws.cell(row=row_idx, column=col_idx).value
                   if cell_value is not None:
                       max_len = max(max_len, len(str(cell_value)))
-              # +5 puffer az Excel auto szűrő nyilak kitakarása ellen
               ws.column_dimensions[col_letter].width = max(max_len + 5, 15)
               
           wb.save(output_path)
