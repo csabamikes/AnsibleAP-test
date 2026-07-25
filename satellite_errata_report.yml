@@ -61,9 +61,6 @@
 #
 ##############################################################################
 
-    - name: Debug host_info content
-      debug:
-        var: host_info
 
 # ============================================================
 # 2. rész - Host Errata API lekérés és kategorizálás
@@ -72,7 +69,7 @@
 
     - name: Store Satellite host id
       set_fact:
-        satellite_host_id: "{{ host_info.json.id }}"
+        satellite_host_id: "{{ host_info.id }}"
 
 
 # ------------------------------------------------------------
