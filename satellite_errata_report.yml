@@ -21,13 +21,15 @@
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
 
-    - name: Konkrét Errata Advisory azonosítók lekérése minden hosthoz külön-külön
-      theforeman.foreman.host_errata_info:
+    - name: Konkrét Errata azonosítók (Advisories) lekérdezése beépített API erőforráson keresztül
+      redhat.satellite.resource_info:
         server_url: "{{ satellite_url }}"
         username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
         password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
         validate_certs: "{{ satellite_validate_certs }}"
-        host: "{{ item.name }}"
+        resource: hosts
+        subresource: errata
+        resource_id: "{{ item.id }}"
       loop: "{{ satellite_hosts_raw.hosts }}"
       loop_control:
         label: "{{ item.name }}"
@@ -38,8 +40,8 @@
         host_report_data: >-
           {% set report_list = [] %}
           {% for host_item in satellite_hosts_raw.hosts %}
-            {% set errata_match = satellite_hosts_errata_raw.results | selectattr('item.name', 'equalto', host_item.name) | first %}
-            {% set advisories = errata_match.errata | default({}) | keys | list | join(', ') if (errata_match and errata_match.errata) else 'Nincs errata' %}
+            {% set errata_match = satellite_hosts_errata_raw.results | selectattr('item.id', 'equalto', host_item.id) | first %}
+            {% set advisories = errata_match.resources | default([]) | map(attribute='pulp_id') | list | join(', ') if errata_match else 'Nincs errata' %}
             {% set _ = report_list.append({
               'Content View': host_item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
               'Hostnév': host_item.name,
