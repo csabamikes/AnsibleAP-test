@@ -10,7 +10,6 @@
     output_dir: "/home/ansible/satellite-errata-report"
     # A fájlnév végéhez dinamikusan hozzáfűzzük az aktuális dátumot és időt YYYYMMDD_HHMM formátumban
     output_filename: "satellite_errata_report_{{ '%Y%m%d_%H%M' | ansible.builtin.strftime(now(fmt='%s') | int + 7200) }}.xlsx"
-
     # --- CÉLHOST (Ahová a reportot menteni kell) ---
     target_host: "rhel9-02" 
   tasks:
@@ -26,20 +25,23 @@
       ansible.builtin.set_fact:
         host_report_data: >-
           {{
-            host_report_data | default([]) + [{
-              'Content View': item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
-              'Hostnév': item.name,
-              'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
-              'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
-              'Összes Errata': item.content_facet_attributes.errata_counts.total | default(0) | int,
-              'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
-              'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
-              'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
-            }]
+          host_report_data | default([]) + [{
+          'Content View': item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
+          'Hostnév': item.name,
+          'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
+          'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
+          'Összes Errata': item.content_facet_attributes.errata_counts.total | default(0) | int,
+          'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
+          'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
+          'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0)),
+          'Security Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'security') | map(attribute='pulp_id') | join(', ') | default('Nincs'),
+          'Bugfix Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'bugfix') | map(attribute='pulp_id') | join(', ') | default('Nincs'),
+          'Enhancement Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'enhancement') | map(attribute='pulp_id') | join(', ') | default('Nincs')
+          }]
           }}
-      loop: "{{ satellite_hosts_raw.hosts }}"
-      loop_control:
-        label: "{{ item.name }}"
+        loop: "{{ satellite_hosts_raw.hosts }}"
+        loop_control:
+          label: "{{ item.name }}"
 
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
@@ -81,7 +83,8 @@
           elvart_oszlopok = [
               'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
               'Összes Errata', 'Biztonsági (Security) Errata', 
-              'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
+              'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata',
+              'Security Errata IDs', 'Bugfix Errata IDs', 'Enhancement Errata IDs'
           ]
           for oszlop in elvart_oszlopok:
               if oszlop not in df.columns:
@@ -94,34 +97,34 @@
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Report')
               wb = writer.book
+          
+          # --- STÍLUSOK DEFINIÁLÁSA ---
+          header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+          header_font = Font(bold=True)
+          # --- AUTOMATIKUS FORMATÁLÁS ÉS OSZLOPSZÉLESSÉG ---
+          for sheet_name in wb.sheetnames:
+              ws = wb[sheet_name]
               
-              # --- STÍLUSOK DEFINIÁLÁSA ---
-              header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
-              header_font = Font(bold=True)
-              # --- AUTOMATIKUS FORMATÁLÁS ÉS OSZLOPSZÉLESSÉG ---
-              for sheet_name in wb.sheetnames:
-                  ws = wb[sheet_name]
-                  
-                  # Auto szűrő bekapcsolása a teljes adattáblára az aktuális munkalapon
-                  ws.auto_filter.ref = ws.dimensions
-                  
-                  # Az első sor (fejléc) rögzítése / lefagyasztása
-                  ws.freeze_panes = 'A2'
-                  
-                  # Kizárólag a legelső sor (fejléc) celláinak formázása szürkére és félkövérre
-                  for cell in ws[1]:
-                      cell.fill = header_fill
-                      cell.font = header_font
-                  # Oszlopszélességek igazítása az oszlopindex alapján (1-től indul)
-                  for col_idx in range(1, ws.max_column + 1):
-                      max_len = 0
-                      col_letter = get_column_letter(col_idx)
-                      for row_idx in range(1, ws.max_row + 1):
-                          cell_value = ws.cell(row=row_idx, column=col_idx).value
-                          if cell_value is not None:
-                              max_len = max(max_len, len(str(cell_value)))
-                      ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
-              print(f"Sikeres mentés: {output_path}")
+              # Auto szűrő bekapcsolása a teljes adattáblára az aktuális munkalapon
+              ws.auto_filter.ref = ws.dimensions
+              
+              # Az első sor (fejléc) rögzítése / lefagyasztása
+              ws.freeze_panes = 'A2'
+              
+              # Kizárólag a legelső sor (fejléc) celláinak formázása szürkére és félkövérre
+              for cell in ws[1]:
+                  cell.fill = header_fill
+                  cell.font = header_font
+              # Oszlopszélességek igazítása az oszlopindex alapján (1-től indul)
+              for col_idx in range(1, ws.max_column + 1):
+                  max_len = 0
+                  col_letter = get_column_letter(col_idx)
+                  for row_idx in range(1, ws.max_row + 1):
+                      cell_value = ws.cell(row=row_idx, column=col_idx).value
+                      if cell_value is not None:
+                          max_len = max(max_len, len(str(cell_value)))
+                  ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+          print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
 
     - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
