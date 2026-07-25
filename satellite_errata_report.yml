@@ -4,7 +4,7 @@
   gather_facts: false
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
-    satellite_url: "https://satellite-01.example.com"
+    satellite_url: "https://example.com"
     satellite_validate_certs: false
     # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
@@ -28,18 +28,20 @@
           host_report_data | default([]) + [{
           'Content View': item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
           'Hostnév': item.name,
-          'Alkalmazható Erraták (Advisories)': item.applicable_errata | default([]) | list | join(', ') | default('Nincs errata'),
           'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
           'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
           'Összes Errata': item.content_facet_attributes.errata_counts.total | default(0) | int,
           'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
           'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
-          'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
+          'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0)),
+          'Security Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'security') | map(attribute='pulp_id') | join(', ') | default('Nincs'),
+          'Bugfix Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'bugfix') | map(attribute='pulp_id') | join(', ') | default('Nincs'),
+          'Enhancement Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'enhancement') | map(attribute='pulp_id') | join(', ') | default('Nincs')
           }]
           }}
-      loop: "{{ satellite_hosts_raw.hosts }}"
-      loop_control:
-        label: "{{ item.name }}"
+        loop: "{{ satellite_hosts_raw.hosts }}"
+        loop_control:
+          label: "{{ item.name }}"
 
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
@@ -79,9 +81,10 @@
               data = json.load(f)
           df = pd.DataFrame(data)
           elvart_oszlopok = [
-              'Content View', 'Hostnév', 'Alkalmazható Erraták (Advisories)', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
+              'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
               'Összes Errata', 'Biztonsági (Security) Errata', 
-              'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
+              'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata',
+              'Security Errata IDs', 'Bugfix Errata IDs', 'Enhancement Errata IDs'
           ]
           for oszlop in elvart_oszlopok:
               if oszlop not in df.columns:
@@ -120,8 +123,7 @@
                       cell_value = ws.cell(row=row_idx, column=col_idx).value
                       if cell_value is not None:
                           max_len = max(max_len, len(str(cell_value)))
-                  # +5 puffer biztosítja, hogy az auto szűrő ikonja se takarja ki a szöveget
-                  ws.column_dimensions[col_letter].width = max(max_len + 5, 15)
+                  ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
 
