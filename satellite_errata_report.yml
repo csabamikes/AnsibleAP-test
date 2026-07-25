@@ -66,9 +66,9 @@
 # Satellite 6.16
 # ============================================================
 
-  - name: Store Satellite host id
-    set_fact:
-      satellite_host_id: "{{ host_info.json.id }}"
+    - name: Store Satellite host id
+      set_fact:
+        satellite_host_id: "{{ host_info.json.id }}"
 
 
 # ------------------------------------------------------------
