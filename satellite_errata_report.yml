@@ -13,7 +13,7 @@
     # --- CÉLHOST (Ahová a reportot menteni kell) ---
     target_host: "rhel9-02" 
   tasks:
-    - name: Hostok alapvető adatainak lekérése a Satellite-ból
+    - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
       redhat.satellite.host_info:
         server_url: "{{ satellite_url }}"
         username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
@@ -21,13 +21,9 @@
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
 
-    - name: Konkrét Errata Advisory ID-k lekérése minden hosthoz
-      redhat.satellite.host_errata_info:
-        server_url: "{{ satellite_url }}"
-        username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
-        password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
-        validate_certs: "{{ satellite_validate_certs }}"
-      register: satellite_errata_raw
+    - name: Adatok strukturálása és előkészítése a report számára
+      ansible.builtin.set_fact:
+        host_report_data: "{{ satellite_hosts_raw.hosts }}"
 
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
@@ -41,23 +37,18 @@
         name: 
           - openpyxl
           - pandas
+          - requests
         state: present
       delegate_to: "{{ target_host }}"
 
     - name: Nyers adatok átmásolása JSON fájlként a távoli hostra
       ansible.builtin.copy:
         dest: "{{ output_dir }}/satellite_data.json"
-        content: >-
-          {{
-            {
-              'hosts': satellite_hosts_raw.hosts,
-              'errata': satellite_errata_raw.host_errata
-            } | to_json
-          }}
+        content: "{{ host_report_data | to_json }}"
         mode: '0644'
       delegate_to: "{{ target_host }}"
 
-    - name: Python script legenerálása a távoli hoston (Adatbeolvasás JSON-ből)
+    - name: Python script legenerálása a távoli hoston (Adatbeolvasás JSON-ből és API kiegészítés)
       ansible.builtin.copy:
         dest: "{{ output_dir }}/generate_report.py"
         mode: '0755'
@@ -66,29 +57,54 @@
           import pandas as pd
           import json
           import os
+          import requests
           from openpyxl.utils import get_column_letter
           from openpyxl.styles import PatternFill, Font
+          
           json_path = '{{ output_dir }}/satellite_data.json'
           with open(json_path, 'r', encoding='utf-8') as f:
-              raw_data = json.load(f)
+              raw_hosts = json.load(f)
               
-          hosts_list = raw_data.get('hosts', [])
-          errata_map = raw_data.get('errata', {})
+          sat_user = os.environ.get('SATELLITE_USER_API', '')
+          sat_pass = os.environ.get('SATELLITE_PASS_API', '')
+          sat_url = '{{ satellite_url }}'
+          verify_ssl = {{ 'True' if satellite_validate_certs else 'False' }}
           
+          # Kikapcsoljuk az SSL figyelmeztetéseket, ha a validate_certs False
+          if not verify_ssl:
+              requests.packages.urllib3.disable_warnings()
+              
           structured_data = []
-          for item in hosts_list:
+          for item in raw_hosts:
               hostname = item.get('name', 'Ismeretlen')
+              host_id = item.get('id')
               cf_attrs = item.get('content_facet_attributes', {})
               cv_name = cf_attrs.get('content_view', {}).get('name', 'Nincs CV / Ismeretlen')
               le_name = cf_attrs.get('lifecycle_environment', {}).get('name', 'Nincs')
               errata_counts = cf_attrs.get('errata_counts', {})
               
-              # Az Advisory ID-kat kikeresük a host_errata_info-ból a hosztnév alapján
-              host_errata_data = errata_map.get(hostname, [])
-              sec_list = [e.get('name') for e in host_errata_data if e.get('type') == 'security' and e.get('name')]
-              bug_list = [e.get('name') for e in host_errata_data if e.get('type') == 'bugfix' and e.get('name')]
-              enh_list = [e.get('name') for e in host_errata_data if e.get('type') == 'enhancement' and e.get('name')]
+              sec_list, bug_list, enh_list = [], [], []
               
+              # Ha van érvényes host ID, lekérjük a konkrét Errata Advisory-kat közvetlenül az API-ból
+              if host_id:
+                  api_url = f"{sat_url}/api/v2/hosts/{host_id}/errata"
+                  try:
+                      response = requests.get(api_url, auth=(sat_user, sat_pass), verify=verify_ssl, timeout=30)
+                      if response.status_code == 200:
+                          errata_results = response.json().get('results', [])
+                          for e in errata_results:
+                              errata_name = e.get('name')  # pl: RHSA-2023:3661
+                              errata_type = e.get('type')  # security, bugfix, enhancement
+                              if errata_name:
+                                  if errata_type == 'security':
+                                      sec_list.append(errata_name)
+                                  elif errata_type == 'bugfix':
+                                      bug_list.append(errata_name)
+                                  elif errata_type == 'enhancement':
+                                      enh_list.append(errata_name)
+                  except Exception:
+                      pass
+                      
               row = {
                   'Content View': cv_name,
                   'Hostnév': hostname,
@@ -117,13 +133,14 @@
           df = df[elvart_oszlopok]
           if not df.empty:
               df = df.sort_values(by=['Content View', 'Hostnév']).reset_index(drop=True)
+              
           os.makedirs('{{ output_dir }}', exist_ok=True)
           output_path = '{{ output_dir }}/{{ output_filename }}'
           
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Report')
               wb = writer.book
-          
+              
           # --- STÍLUSOK DEFINIÁLÁSA ---
           header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
           header_font = Font(bold=True)
@@ -131,19 +148,15 @@
           # --- AUTOMATIKUS FORMATÁLÁS ÉS OSZLOPSZÉLESSÉG ---
           for sheet_name in wb.sheetnames:
               ws = wb[sheet_name]
-              
-              # Auto szűrő bekapcsolása a teljes adattáblára az aktuális munkalapon
               ws.auto_filter.ref = ws.dimensions
-              
-              # Az első sor (fejléc) rögzítése / lefagyasztása
               ws.freeze_panes = 'A2'
               
-              # ERDEDETI PONTOS FORMÁZÁS: Kizárólag a legelső sor celláinak formázása szürkére és félkövérre
+              # AZ EREDETI PONTOS FORMÁZÁS: Kizárólag a legelső sor (fejléc) celláinak színezése
               for cell in ws[1]:
                   cell.fill = header_fill
                   cell.font = header_font
                   
-              # Oszlopszélességek igazítása az oszlopindex alapján (1-től indul)
+              # Oszlopszélességek igazítása az oszlopindex alapján
               for col_idx in range(1, ws.max_column + 1):
                   max_len = 0
                   col_letter = get_column_letter(col_idx)
@@ -155,11 +168,17 @@
                   
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
+      environment:
+        SATELLITE_USER_API: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
+        SATELLITE_PASS_API: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
 
     - name: A legenerált Python script lefuttatása az Excel elkészítéséhez
       ansible.builtin.command:
         cmd: "python3 {{ output_dir }}/generate_report.py"
       delegate_to: "{{ target_host }}"
+      environment:
+        SATELLITE_USER_API: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
+        SATELLITE_PASS_API: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
 
     - name: Ideiglenes Python és JSON fájlok törlése (Takarítás)
       ansible.builtin.file:
