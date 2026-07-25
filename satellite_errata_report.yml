@@ -69,11 +69,11 @@
               le_name = cf_attrs.get('lifecycle_environment', {}).get('name', 'Nincs')
               errata_counts = cf_attrs.get('errata_counts', {})
               
-              # Az applicable_errata tömbből kinyerjük az errata nevét (pl: RHSA-2023:3661) a típus alapján
+              # Az applicable_errata vagy errata_status tömbből kinyerjük az Advisory nevet (pl: RHSA-2023:3661)
               applicable_errata = cf_attrs.get('applicable_errata', [])
-              sec_list = [e.get('name', e.get('pulp_id', '')) for e in applicable_errata if e.get('type') == 'security']
-              bug_list = [e.get('name', e.get('pulp_id', '')) for e in applicable_errata if e.get('type') == 'bugfix']
-              enh_list = [e.get('name', e.get('pulp_id', '')) for e in applicable_errata if e.get('type') == 'enhancement']
+              sec_list = [e.get('name') for e in applicable_errata if e.get('type') == 'security' and e.get('name')]
+              bug_list = [e.get('name') for e in applicable_errata if e.get('type') == 'bugfix' and e.get('name')]
+              enh_list = [e.get('name') for e in applicable_errata if e.get('type') == 'enhancement' and e.get('name')]
               
               row = {
                   'Content View': cv_name,
@@ -84,9 +84,9 @@
                   'Biztonsági (Security) Errata': int(errata_counts.get('security', 0)),
                   'Hibajavító (Bugfix) Errata': int(errata_counts.get('bugfix', 0)),
                   'Fejlesztési (Enhancement) Errata': int(errata_counts.get('enhancement', 0)),
-                  'Security Errata IDs': ', '.join(filter(None, sec_list)) if sec_list else 'Nincs',
-                  'Bugfix Errata IDs': ', '.join(filter(None, bug_list)) if bug_list else 'Nincs',
-                  'Enhancement Errata IDs': ', '.join(filter(None, enh_list)) if enh_list else 'Nincs'
+                  'Security Errata IDs': ', '.join(sec_list) if sec_list else 'Nincs',
+                  'Bugfix Errata IDs': ', '.join(bug_list) if bug_list else 'Nincs',
+                  'Enhancement Errata IDs': ', '.join(enh_list) if enh_list else 'Nincs'
               }
               structured_data.append(row)
               
@@ -105,6 +105,7 @@
               df = df.sort_values(by=['Content View', 'Hostnév']).reset_index(drop=True)
           os.makedirs('{{ output_dir }}', exist_ok=True)
           output_path = '{{ output_dir }}/{{ output_filename }}'
+          
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Report')
               wb = writer.book
@@ -112,6 +113,7 @@
           # --- STÍLUSOK DEFINIÁLÁSA ---
           header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
           header_font = Font(bold=True)
+          
           # --- AUTOMATIKUS FORMATÁLÁS ÉS OSZLOPSZÉLESSÉG ---
           for sheet_name in wb.sheetnames:
               ws = wb[sheet_name]
@@ -126,6 +128,7 @@
               for cell in ws[1]:
                   cell.fill = header_fill
                   cell.font = header_font
+                  
               # Oszlopszélességek igazítása az oszlopindex alapján (1-től indul)
               for col_idx in range(1, ws.max_column + 1):
                   max_len = 0
@@ -135,6 +138,7 @@
                       if cell_value is not None:
                           max_len = max(max_len, len(str(cell_value)))
                   ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+                  
           print(f"Sikeres mentés: {output_path}")
       delegate_to: "{{ target_host }}"
 
