@@ -33,15 +33,12 @@
           'Összes Errata': item.content_facet_attributes.errata_counts.total | default(0) | int,
           'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
           'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
-          'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0)),
-          'Security Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'security') | map(attribute='pulp_id') | join(', ') | default('Nincs'),
-          'Bugfix Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'bugfix') | map(attribute='pulp_id') | join(', ') | default('Nincs'),
-          'Enhancement Errata IDs': item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'enhancement') | map(attribute='pulp_id') | join(', ') | default('Nincs')
+          'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
           }]
           }}
-        loop: "{{ satellite_hosts_raw.hosts }}"
-        loop_control:
-          label: "{{ item.name }}"
+      loop: "{{ satellite_hosts_raw.hosts }}"
+      loop_control:
+        label: "{{ item.name }}"
 
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
@@ -83,8 +80,7 @@
           elvart_oszlopok = [
               'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
               'Összes Errata', 'Biztonsági (Security) Errata', 
-              'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata',
-              'Security Errata IDs', 'Bugfix Errata IDs', 'Enhancement Errata IDs'
+              'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
           ]
           for oszlop in elvart_oszlopok:
               if oszlop not in df.columns:
