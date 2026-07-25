@@ -4,7 +4,7 @@
   gather_facts: false
   vars:
     # --- SATELLITE BEÁLLÍTÁSOK ---
-    satellite_url: "https://satellite-01.example.com"
+    satellite_url: "https://example.com"
     satellite_validate_certs: false
     # --- JELENTÉS BEÁLLÍTÁSAI ---
     output_dir: "/home/ansible/satellite-errata-report"
@@ -28,7 +28,7 @@
           {% for host_item in satellite_hosts_raw.hosts %}
             {% set sec_ids = host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'security') | map(attribute='pulp_id') | join(', ') %}
             {% set bug_ids = host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'bugfix') | map(attribute='pulp_id') | join(', ') %}
-            {% set enh_ids = host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'enhancement') | map(attribute='pulp_id') | join(', ') %}
+            {% set_enh_ids = host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'enhancement') | map(attribute='pulp_id') | join(', ') %}
             {% set _ = ns.items.append({
               'Content View': host_item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
               'Hostnév': host_item.name,
@@ -81,6 +81,11 @@
           json_path = '{{ output_dir }}/satellite_data.json'
           with open(json_path, 'r', encoding='utf-8') as f:
               data = json.load(f)
+              
+          # Kényszerített konverzió, ha a JSON tartalom stringként lett elmentve
+          if isinstance(data, str):
+              data = json.loads(data)
+              
           df = pd.DataFrame(data)
           elvart_oszlopok = [
               'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
