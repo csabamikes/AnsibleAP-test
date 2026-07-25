@@ -23,27 +23,7 @@
 
     - name: Adatok strukturálása és előkészítése a report számára
       ansible.builtin.set_fact:
-        host_report_data: >-
-          {% set ns = namespace(items=[]) %}
-          {% for host_item in satellite_hosts_raw.hosts %}
-            {% set sec_ids = host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'security') | map(attribute='pulp_id') | join(', ') %}
-            {% set bug_ids = host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'bugfix') | map(attribute='pulp_id') | join(', ') %}
-            {% set enh_ids = host_item.content_facet_attributes.applicable_errata | default([]) | selectattr('type', 'equalto', 'enhancement') | map(attribute='pulp_id') | join(', ') %}
-            {% set _ = ns.items.append({
-              "Content View": host_item.content_facet_attributes.content_view.name | default("Nincs CV / Ismeretlen"),
-              "Hostnév": host_item.name,
-              "Operációs rendszer": host_item.operatingsystem_name | default("Ismeretlen"),
-              "Környezet (Lifecycle ID)": host_item.content_facet_attributes.lifecycle_environment.name | default("Nincs"),
-              "Összes Errata": host_item.content_facet_attributes.errata_counts.total | default(0) | int,
-              "Biztonsági (Security) Errata": host_item.content_facet_attributes.errata_counts.security | default(0),
-              "Hibajavító (Bugfix) Errata": host_item.content_facet_attributes.errata_counts.bugfix | default(0),
-              "Fejlesztési (Enhancement) Errata": host_item.content_facet_attributes.errata_counts.enhancement | default(0),
-              "Security Errata IDs": sec_ids if sec_ids else "Nincs",
-              "Bugfix Errata IDs": bug_ids if bug_ids else "Nincs",
-              "Enhancement Errata IDs": enh_ids if enh_ids else "Nincs"
-            }) %}
-          {% endfor %}
-          {{ ns.items | to_json }}
+        host_report_data: "{{ satellite_hosts_raw.hosts }}"
 
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
@@ -63,7 +43,7 @@
     - name: Nyers adatok átmásolása JSON fájlként a távoli hostra
       ansible.builtin.copy:
         dest: "{{ output_dir }}/satellite_data.json"
-        content: "{{ host_report_data }}"
+        content: "{{ host_report_data | to_json }}"
         mode: '0644'
       delegate_to: "{{ target_host }}"
 
@@ -80,9 +60,36 @@
           from openpyxl.styles import PatternFill, Font
           json_path = '{{ output_dir }}/satellite_data.json'
           with open(json_path, 'r', encoding='utf-8') as f:
-              data = json.load(f)
+              raw_hosts = json.load(f)
               
-          df = pd.DataFrame(data)
+          structured_data = []
+          for item in raw_hosts:
+              cf_attrs = item.get('content_facet_attributes', {})
+              cv_name = cf_attrs.get('content_view', {}).get('name', 'Nincs CV / Ismeretlen')
+              le_name = cf_attrs.get('lifecycle_environment', {}).get('name', 'Nincs')
+              errata_counts = cf_attrs.get('errata_counts', {})
+              
+              applicable_errata = cf_attrs.get('applicable_errata', [])
+              sec_list = [e.get('pulp_id', e.get('name', '')) for e in applicable_errata if e.get('type') == 'security']
+              bug_list = [e.get('pulp_id', e.get('name', '')) for e in applicable_errata if e.get('type') == 'bugfix']
+              enh_list = [e.get('pulp_id', e.get('name', '')) for e in applicable_errata if e.get('type') == 'enhancement']
+              
+              row = {
+                  'Content View': cv_name,
+                  'Hostnév': item.get('name', 'Ismeretlen'),
+                  'Operációs rendszer': item.get('operatingsystem_name', 'Ismeretlen'),
+                  'Környezet (Lifecycle ID)': le_name,
+                  'Összes Errata': int(errata_counts.get('total', 0)),
+                  'Biztonsági (Security) Errata': int(errata_counts.get('security', 0)),
+                  'Hibajavító (Bugfix) Errata': int(errata_counts.get('bugfix', 0)),
+                  'Fejlesztési (Enhancement) Errata': int(errata_counts.get('enhancement', 0)),
+                  'Security Errata IDs': ', '.join(filter(None, sec_list)) if sec_list else 'Nincs',
+                  'Bugfix Errata IDs': ', '.join(filter(None, bug_list)) if bug_list else 'Nincs',
+                  'Enhancement Errata IDs': ', '.join(filter(None, enh_list)) if enh_list else 'Nincs'
+              }
+              structured_data.append(row)
+              
+          df = pd.DataFrame(structured_data)
           elvart_oszlopok = [
               'Content View', 'Hostnév', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
               'Összes Errata', 'Biztonsági (Security) Errata', 
