@@ -115,7 +115,7 @@
               ws.freeze_panes = 'A2'
               
               # Kizárólag a legelső sor (fejléc) celláinak formázása szürkére és félkövérre
-              for cell in ws:
+              for cell in ws[1]:
                   cell.fill = header_fill
                   cell.font = header_font
               # Oszlopszélességek igazítása az oszlopindex alapján (1-től indul)
