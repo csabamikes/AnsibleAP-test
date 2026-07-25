@@ -87,7 +87,14 @@
           password = "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
           
           with open(json_path, 'r', encoding='utf-8') as f:
-              hosts_data = json.load(f)
+              raw_content = f.read()
+              # Biztosítjuk, hogy a beolvasott tartalom tiszta Python lista/szótár legyen
+              try:
+                  hosts_data = json.loads(raw_content)
+                  if isinstance(hosts_data, str):
+                      hosts_data = json.loads(hosts_data)
+              except Exception:
+                  hosts_data = json.loads(raw_content)
 
           # Errata kódok lekérése minden hosthoz az API-ból közvetlenül Pythonból
           for host in hosts_data:
@@ -136,6 +143,7 @@
           header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
           header_font = Font(bold=True)
           
+          # Kizárólag a legelső sor celláinak színezése
           for cell in ws[1]:
               cell.fill = header_fill
               cell.font = header_font
