@@ -39,7 +39,7 @@
         username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
         password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
         validate_certs: "{{ satellite_validate_certs }}"
-      register: satellite_hosts_raw
+      register: host_info
 
 ##############################################################################
 # ELŐKÉSZÍTÉS
