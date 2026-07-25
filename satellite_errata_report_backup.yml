@@ -13,33 +13,13 @@
     # --- CÉLHOST (Ahová a reportot menteni kell) ---
     target_host: "rhel9-02" 
   tasks:
-    - name: Hostok és kapcsolódó errata adatok lekérése a Satellite-ból
+    - name: Hostok alapvető adatainak lekérése a Satellite-ból
       redhat.satellite.host_info:
         server_url: "{{ satellite_url }}"
         username: "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
         password: "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
         validate_certs: "{{ satellite_validate_certs }}"
       register: satellite_hosts_raw
-
-    - name: Adatok strukturálása és előkészítése a report számára
-      ansible.builtin.set_fact:
-        host_report_data: >-
-          {{
-          host_report_data | default([]) + [{
-          'Content View': item.content_facet_attributes.content_view.name | default('Nincs CV / Ismeretlen'),
-          'Hostnév': item.name,
-          'Alkalmazható Erraták (Advisories)': item.applicable_errata | default([]) | list | join(', ') | default('Nincs errata'),
-          'Operációs rendszer': item.operatingsystem_name | default('Ismeretlen'),
-          'Környezet (Lifecycle ID)': item.content_facet_attributes.lifecycle_environment.name | default('Nincs'),
-          'Összes Errata': item.content_facet_attributes.errata_counts.total | default(0) | int,
-          'Biztonsági (Security) Errata': (item.content_facet_attributes.errata_counts.security | default(0)),
-          'Hibajavító (Bugfix) Errata': (item.content_facet_attributes.errata_counts.bugfix | default(0)),
-          'Fejlesztési (Enhancement) Errata': (item.content_facet_attributes.errata_counts.enhancement | default(0))
-          }]
-          }}
-      loop: "{{ satellite_hosts_raw.hosts }}"
-      loop_control:
-        label: "{{ item.name }}"
 
     - name: Célkönyvtár ellenőrzése (ha nem létezik, akkor létrehozása) a távoli hoston
       ansible.builtin.file:
@@ -48,22 +28,23 @@
         mode: '0755'
       delegate_to: "{{ target_host }}"
 
-    - name: Biztosítjuk, hogy a python openpyxl és pandas telepítve legyen a célgépen
+    - name: Biztosítjuk, hogy a python openpyxl, pandas és requests telepítve legyen a célgépnek
       ansible.builtin.pip:
         name: 
           - openpyxl
           - pandas
+          - requests
         state: present
       delegate_to: "{{ target_host }}"
 
-    - name: Nyers adatok átmásolása JSON fájlként a távoli hostra
+    - name: Nyers natív Satellite adatok átmásolása tiszta JSON fájlként a távoli hostra
       ansible.builtin.copy:
         dest: "{{ output_dir }}/satellite_data.json"
-        content: "{{ host_report_data | to_json }}"
+        content: "{{ satellite_hosts_raw.hosts | to_json }}"
         mode: '0644'
       delegate_to: "{{ target_host }}"
 
-    - name: Python script legenerálása a távoli hoston (Adatbeolvasás JSON-ből)
+    - name: Python script legenerálása (API errata adatok közvetlen lekérése és Excel formázás)
       ansible.builtin.copy:
         dest: "{{ output_dir }}/generate_report.py"
         mode: '0755'
@@ -72,23 +53,72 @@
           import pandas as pd
           import json
           import os
+          import requests
           import openpyxl
           from openpyxl.utils import get_column_letter
           from openpyxl.styles import PatternFill, Font
-          
+          import urllib3
+          urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
           json_path = '{{ output_dir }}/satellite_data.json'
           output_path = '{{ output_dir }}/{{ output_filename }}'
-          os.makedirs('{{ output_dir }}', exist_ok=True)
+          
+          satellite_url = "{{ satellite_url }}"
+          username = "{{ lookup('ansible.builtin.env', 'SATELLITE_USER_API') }}"
+          password = "{{ lookup('ansible.builtin.env', 'SATELLITE_PASS_API') }}"
           
           with open(json_path, 'r', encoding='utf-8') as f:
-              data = json.load(f)
+              raw_satellite_hosts = json.load(f)
+
+          hosts_report_list = []
+
+          # Adatfeldolgozás és Errata kódok lekérése minden hosthoz az API-ból közvetlenül Pythonból
+          for host_item in raw_satellite_hosts:
+              host_id = host_item.get('id')
+              host_name = host_item.get('name', 'Ismeretlen')
               
-          df = pd.DataFrame(data)
+              # Biztonságos mély adatbeolvasás a facet attribútumokból
+              facet = host_item.get('content_facet_attributes', {}) or {}
+              cv_name = facet.get('content_view', {}).get('name', 'Nincs CV / Ismeretlen') if facet.get('content_view') else 'Nincs CV / Ismeretlen'
+              env_name = facet.get('lifecycle_environment', {}).get('name', 'Nincs') if facet.get('lifecycle_environment') else 'Nincs'
+              errata_counts = facet.get('errata_counts', {}) or {}
+              
+              advisories_str = "Nincs errata"
+              if host_id:
+                  api_url = f"{satellite_url}/api/hosts/{host_id}/errata"
+                  try:
+                      response = requests.get(api_url, auth=(username, password), verify=False, headers={'Accept': 'application/json'})
+                      if response.status_code == 200:
+                          res_data = response.json()
+                          errata_list = res_data.get('results', []) or res_data.get('resources', []) or []
+                          advisories = [e.get('errata_number') or e.get('pulp_id') or e.get('id') for e in errata_list if e]
+                          advisories = [str(x) for x in advisories if x]
+                          if advisories:
+                              advisories_str = ", ".join(advisories)
+                      else:
+                          advisories_str = "API Hiba"
+                  except Exception as e:
+                      advisories_str = f"Hiba: {str(e)}"
+
+              hosts_report_list.append({
+                  'Content View': cv_name,
+                  'Hostnév': host_name,
+                  'Alkalmazható Erraták (Advisories)': advisories_str,
+                  'Operációs rendszer': host_item.get('operatingsystem_name', 'Ismeretlen'),
+                  'Környezet (Lifecycle ID)': env_name,
+                  'Összes Errata': int(errata_counts.get('total', 0)),
+                  'Biztonsági (Security) Errata': int(errata_counts.get('security', 0)),
+                  'Hibajavító (Bugfix) Errata': int(errata_counts.get('bugfix', 0)),
+                  'Fejlesztési (Enhancement) Errata': int(errata_counts.get('enhancement', 0))
+              })
+
+          df = pd.DataFrame(hosts_report_list)
           elvart_oszlopok = [
               'Content View', 'Hostnév', 'Alkalmazható Erraták (Advisories)', 'Operációs rendszer', 'Környezet (Lifecycle ID)', 
               'Összes Errata', 'Biztonsági (Security) Errata', 
               'Hibajavító (Bugfix) Errata', 'Fejlesztési (Enhancement) Errata'
           ]
+          
           for oszlop in elvart_oszlopok:
               if oszlop not in df.columns:
                   df[oszlop] = 'Nincs'
@@ -97,30 +127,24 @@
           if not df.empty:
               df = df.sort_values(by=['Content View', 'Hostnév']).reset_index(drop=True)
               
-          # 1. LÉPÉS: A Pandas elmenti a tiszta adatokat az Excelbe és TELJESEN bezárja a fájlt
           with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
               df.to_excel(writer, index=False, sheet_name='Errata Report')
           
-          # 2. LÉPÉS: Az openpyxl-lel újra megnyitjuk a kész Excel fájlt, így a formázás biztosan megmarad
+          # --- Excel utólagos formázása openpyxl-lel ---
           wb = openpyxl.load_workbook(output_path)
           ws = wb['Errata Report']
           
-          # Auto szűrő bekapcsolása a tartományra
           ws.auto_filter.ref = ws.dimensions
-          
-          # Első sor rögzítése
           ws.freeze_panes = 'A2'
           
-          # Stílusok beállítása
           header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
           header_font = Font(bold=True)
           
-          # KIZÁRÓLAG az első sor (fejléc) celláinak formázása szürkére és félkövérre
+          # KIZÁRÓLAG az első sor (fejléc) celláinak színezése és formázása
           for cell in ws[1]:
               cell.fill = header_fill
               cell.font = header_font
               
-          # Oszlopszélességek automatikus igazítása
           for col_idx in range(1, ws.max_column + 1):
               max_len = 0
               col_letter = get_column_letter(col_idx)
@@ -128,10 +152,8 @@
                   cell_value = ws.cell(row=row_idx, column=col_idx).value
                   if cell_value is not None:
                       max_len = max(max_len, len(str(cell_value)))
-              # +5 puffer az Excel szűrő ikonok kitakarása ellen
               ws.column_dimensions[col_letter].width = max(max_len + 5, 15)
               
-          # Változtatások mentése
           wb.save(output_path)
           wb.close()
           print(f"Sikeres mentés és formázás: {output_path}")
