@@ -1,0 +1,471 @@
+- name: Linux snapshot lista
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  become: false
+  
+
+  vars:
+
+    target_hosts: "{{ vmsnap_hosts }}"
+    vmware_datacenter: "MAVIR"
+    snapshot_name: "2025.05. update"
+    snapshot_desc: "Linux frissites elott, torolhet 1 het mulva"
+
+
+  vars_prompt:
+
+    - name: vcenter_username
+      prompt: "VMware username"
+      private: no
+
+    - name: vcenter_password
+      prompt: "What is your password"
+
+
+  tasks:
+    - name: Debug
+      loop: "{{ query('inventory_hostnames', target_hosts) }}"
+      debug:
+        msg: "List VM Snapshot for {{ item }} on VCenter SRV: {{ hostvars[item].vcenter_name }}"
+
+    - name: LIST VMs snap
+      vmware_guest_snapshot_info:
+        datacenter: "{{ vmware_datacenter }}"
+        hostname: "{{ hostvars[item].vcenter_name }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: False
+        name: "{{ item }}"
+        folder: "/"
+      delegate_to: localhost
+      loop: "{{ query('inventory_hostnames', target_hosts) }}"
+      register: res
+
+    - name: Display
+      debug:
+        var: res
+
+- name: Linux snapshot torles
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  become: false
+  
+
+  vars:
+
+    target_hosts: "{{ vmsnap_hosts }}"
+    vmware_datacenter: "MAVIR"
+    snapshot_name: "{{ vmsnap_snname }}"
+
+
+  vars_prompt:
+
+    - name: vcenter_username
+      prompt: "VMware username"
+      private: no
+
+    - name: vcenter_password
+      prompt: "What is your password"
+
+
+  tasks:
+    - name: Debug
+      loop: "{{ query('inventory_hostnames', target_hosts) }}"
+      debug:
+        msg: "Delete VM Snapshot {{ snapshot_name }} for {{ item }} on VCenter SRV: {{ hostvars[item].vcenter_name }}"
+
+    - name: Delete VMs snap
+      vmware_guest_snapshot:
+        datacenter: "{{ vmware_datacenter }}"
+        hostname: "{{ hostvars[item].vcenter_name }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: False
+        name: "{{ item }}"
+        folder: "/"
+        state: absent
+        snapshot_name: "{{ snapshot_name }}"
+      delegate_to: localhost
+      loop: "{{ query('inventory_hostnames', target_hosts) }}"
+      register: res
+
+    - name: Display result
+      debug:
+        var: res
+
+INVENTORY="/home/ansible/vmware_snap/inventory";
+
+echo "Inventory Group stanzas for VMware Snapshots :";
+grep "^\[" $INVENTORY | sed -e 's/\[//' | sed -e 's/\]//'
+
+#version 0.99
+#by JunkertF
+
+INV_GRP="$1";
+ANS=`which ansible-playbook`;
+INVENTORY="/home/ansible/vmware_snap/inventory";
+ANSYML="/home/ansible/vmware_snap/SNAP_List.yml"
+DT=`echo $(date +%Y.%m.)`;
+LOGD="$(pwd)/log";
+LOGF="$LOGD/SNAP_List_$INV_GRP.$DT.log";
+
+if [ -n "$INV_GRP" ]; then
+	INVGNAMECNT=`grep -w $1 $INVENTORY | wc -l`;
+	case $INVGNAMECNT in
+		0)
+			echo "Non existent Inventory Group NAME!!!"
+			exit 98
+			;;
+		1)
+			$ANS -i $INVENTORY $ANSYML -e "vmsnap_hosts=$INV_GRP" | tee $LOGF
+			echo "Existing VMWare Snapshots for VM's:"
+			grep -A 30 "invocation" $LOGF | grep -wE "name|snapshot_name"
+			;;
+		2)
+			echo "Inventory Group Name is multiple time in Inventory, must CHECK!"
+			exit 97
+			;;
+
+	esac
+
+
+else #ERROR 
+	echo "Inventory Group not given as parameter!";
+	exit 99;
+
+fi
+
+#Listafile-generálással és ellenorzesekkel kiegesziteni
+# Not complete! Must check commands!
+
+INV_GRP="$1";
+ANS=`which ansible-playbook`;
+INVENTORY="/home/ansible/vmware_snap/inventory";
+ANSYML="/home/ansible/vmware_snap/SNAP_Create.yml";
+
+DT=`echo $(date +%Y.%m.)`;
+LOGD="$(pwd)/log";
+LOGF="$LOGD/SNAP_Create_$INV_GRP.$DT.log";
+SNAPDSTNAME="$DT-Monthly-OSPatch-Snapshot"
+
+
+if [ -n "$INV_GRP" ]; then
+        INVGNAMECNT=`grep -w $1 $INVENTORY | wc -l`;
+        case $INVGNAMECNT in
+                0)
+                        echo "Non existent Inventory Group NAME!!!"
+                        exit 98
+                        ;;
+                1)
+                        $ANS -i $INVENTORY $ANSYML -e "vmsnap_hosts=$INV_GRP vmsnap_snname=$SNAPDSTNAME" | tee $LOGF
+			#include SNAP_List.yml... ???
+                        echo "Created VMWare Snapshots for VM's:"
+			grep -w -A 21 "ansible_loop_var" $LOGF | grep -wE "name|snapshot_name"
+                        ;;
+                2)
+                        echo "Inventory Group Name is multiple time in Inventory, must CHECK!"
+                        exit 97
+                        ;;
+
+        esac
+
+
+else #ERROR 
+        echo "Inventory Group not given as parameter!";
+        exit 99;
+
+fi
+
+#Listafile-generálással és ellenorzesekkel kiegesziteni
+# Not complete! Must check commands!
+
+#!/bin/bash
+#Listafile-generálással és ellenorzesekkel kiegesziteni
+# Not complete! Must check commands!
+
+INV_GRP="$1";
+ANS=`which ansible-playbook`;
+INVENTORY="/home/ansible/vmware_snap/inventory";
+ANSYML="/home/ansible/vmware_snap/SNAP_Delete.yml";
+SNAPNAME="$2";
+
+DT=`echo $(date +%Y.%m.)`;
+LOGD="$(pwd)/log";
+LOGF="$LOGD/SNAP_Delete_$INV_GRP.$DT.log";
+
+if [ ! -n "$SNAPNAME" ]; then
+
+        echo "VMware Snapshot Name not given as parameter!";
+        exit 99;
+
+
+fi
+
+
+if [ -n "$INV_GRP" ]; then
+        INVGNAMECNT=`grep -w $1 $INVENTORY | wc -l`;
+        case $INVGNAMECNT in
+                0)
+                        echo "Non existent Inventory Group NAME!!!"
+                        exit 98
+                        ;;
+                1)
+                        $ANS -i $INVENTORY $ANSYML -e "vmsnap_hosts=$INV_GRP vmsnap_snname=$SNAPNAME" | tee $LOGF
+                        #include SNAP_List.yml... ???
+                        #echo "Existing VMWare Snapshots for VM's:"
+                        #grep -w -A 17 "snapshots" $LOGF | grep "name" | grep -vE "username|hostname"
+			grep -w --before-context=11 -v "absent" $LOGF | grep name | grep -vE "username|hostname|new_snapshot_name|name_match"
+                        ;;
+                2)
+                        echo "Inventory Group Name is multiple time in Inventory, must CHECK!"
+                        exit 97
+                        ;;
+
+        esac
+
+
+else #ERROR 
+        echo "Inventory Group not given as parameter!";
+        exit 99;
+
+fi
+
+exit 0;
+
+localhost
+
+[DMZ_TEST_Linux]
+v-aapdmz-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-szofiws-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-sztirdws-01-d		vcenter_name=v-vcenter-03-p.mavir.local
+v-internetweb-01-t	vcenter_name=v-vcenter-03-p.mavir.local
+v-vedstatweb-01-t	vcenter_name=v-vcenter-03-p.mavir.local
+v-webatr-01-d		vcenter_name=v-vcenter-03-p.mavir.local
+v-webatr-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-pmaweb-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-mekweb-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-mekweb-03-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-mekweb-05-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-mxbidweb-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-soaweb-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-katiweb-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-pblmeh-01-d		vcenter_name=v-vcenter-03-p.mavir.local
+v-kapas-03-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-webuil-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-rtdwweb-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-szofiws-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-sztirdws-02-d		vcenter_name=v-vcenter-03-p.mavir.local
+v-internetweb-02-t	vcenter_name=v-vcenter-03-p.mavir.local
+v-vedstatweb-02-t	vcenter_name=v-vcenter-03-p.mavir.local
+v-pmaweb-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-mekweb-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-mekweb-04-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-mekweb-06-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-mxbidweb-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-soaweb-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-katiweb-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-pblmeh-02-d		vcenter_name=v-vcenter-03-p.mavir.local
+v-kapas-04-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-webuil-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-rtdwweb-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpbspgw-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpbspgw-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-mauroapp-01-t		vcenter_name=v-vcenter-04-p.mavir.local
+
+[DMZ_PROD_Linux_Stage1]
+v-szofiws-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-sztirws-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-internetweb-01-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-vedstatweb-01-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-partnerweb-01-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-webatr-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-pmaweb-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-mekweb-03-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-mxbidweb-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-soaweb-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-katiweb-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-pblmeh-03-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-kapas-03-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-rtdwweb-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-dmzdns-11-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpbspgw-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+
+[DMZ_PROD_Linux_Stage2]
+v-szofiws-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-sztirws-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-internetweb-02-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-vedstatweb-02-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-partnerweb-02-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-pmaweb-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-mekweb-04-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-mxbidweb-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-soaweb-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-katiweb-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-pblmeh-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-kapas-04-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-rtdwweb-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-dmzdns-12-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpbspgw-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+
+[MGMT_TEST_Linux]
+v-aapmgmt-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-coreeccosp-01-t	vcenter_name=v-vcenter-03-p.mavir.local
+v-ooseccosp-01-t	vcenter_name=v-vcenter-03-p.mavir.local
+v-coreproxy-01-t	vcenter_name=v-vcenter-03-p.mavir.local
+v-oosproxy-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-coreeccosp-02-t	vcenter_name=v-vcenter-03-p.mavir.local
+v-ooseccosp-02-t	vcenter_name=v-vcenter-03-p.mavir.local
+v-coreproxy-02-t	vcenter_name=v-vcenter-03-p.mavir.local
+v-oosproxy-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-vpecp-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-vpecp-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpmapi-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpmapi-02-t          vcenter_name=v-vcenter-03-p.mavir.local
+v-ilmt-01-t             vcenter_name=v-vcenter-01-t.mavir.local
+
+[MGMT_PROD_Linux_Stage1]
+v-coreeccosp-01-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-ooseccosp-01-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-coreproxy-01-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-oosproxy-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-vpecp-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpmapi-01-p          vcenter_name=v-vcenter-03-p.mavir.local
+v-ilmt-01-p             vcenter_name=v-vcenter-03-p.mavir.local
+
+[MGMT_PROD_Linux_Stage2]
+v-coreeccosp-02-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-ooseccosp-02-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-coreproxy-02-p	vcenter_name=v-vcenter-03-p.mavir.local
+v-oosproxy-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-vpecp-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpmapi-02-p          vcenter_name=v-vcenter-03-p.mavir.local
+
+[IRODA_TEST_Linux]
+v-aapiroda-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-aapcntrlir-01-t	vcenter_name=v-vcenter-01-t.mavir.local
+v-microsec-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-intranet-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-pmaapp-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-rtdwapp-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-microsec-02-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-intranet-02-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-pmaapp-02-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-odsapp-02-d		vcenter_name=v-vcenter-01-t.mavir.local
+v-rtdwapp-02-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-liferaytest-01-t	vcenter_name=v-vcenter-04-p.mavir.local
+v-tm1web-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-ecpbspcd-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-ecpbspcd-02-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-ecpbspep-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-ecpbspep-02-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-ecpemfip-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpemfip-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-bis-01-d              vcenter_name=v-vcenter-04-p.mavir.local
+v-confluence-02-t	vcenter_name=v-vcenter-01-t.mavir.local
+v-confluence-03-t	vcenter_name=v-vcenter-01-t.mavir.local
+v-confluence-04-t	vcenter_name=v-vcenter-01-t.mavir.local
+v-katiapp-01-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-katiapp-02-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-mekapp-01-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-mekapp-02-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-mekapp-03-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-mekapp-04-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-mekapp-05-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-mekapp-06-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-vedstat-01-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-ecpbspcd-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-ecpbspcd-02-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-ecpbspep-01-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-ecpbspep-02-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-vtweb-01-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-vtweb-02-t		vcenter_name=v-vcenter-03-p.mavir.local
+v-vtapp-01-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-vtapp-02-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-jira-02-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-jira-03-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-jira-04-t		vcenter_name=v-vcenter-01-t.mavir.local
+v-soaadm-01-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-soaapp-01-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-soaapp-02-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-soa-01-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-soa-01-d		vcenter_name=v-vcenter-04-p.mavir.local
+v-soa-02-t		vcenter_name=v-vcenter-04-p.mavir.local
+v-soa-02-d		vcenter_name=v-vcenter-04-p.mavir.local
+v-hqmap-01-t            vcenter_name=v-vcenter-01-t.mavir.local
+v-gpfspnode-01-t        vcenter_name=v-vcenter-01-t.mavir.local
+v-gpfspnode-02-t        vcenter_name=v-vcenter-01-t.mavir.local
+v-gpfspnode-03-t        vcenter_name=v-vcenter-01-t.mavir.local
+v-sonarbuild-01-t       vcenter_name=v-vcenter-01-t.mavir.local
+v-sonarqube-01-t        vcenter_name=v-vcenter-01-t.mavir.local
+
+[IRODA_PROD_Linux_Stage1]
+v-microsec-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-intranet-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-pmaapp-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-rtdwapp-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-odsapp-03-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-interwl-01-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-tm1web-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-bis-01-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-confluence-03-p       vcenter_name=v-vcenter-03-p.mavir.local
+v-katiapp-01-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-mekapp-03-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-ecpemfip-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-vedstat-01-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-ecpbspcd-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpbspep-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-vtapp-01-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-vtweb-01-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-jira-03-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-soaadm-01-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-soaapp-01-b		vcenter_name=v-vcenter-04-p.mavir.local
+v-soaapp-02-b		vcenter_name=v-vcenter-04-p.mavir.local
+v-soa-01-b		vcenter_name=v-vcenter-04-p.mavir.local
+v-soa-02-b		vcenter_name=v-vcenter-04-p.mavir.local
+v-gpfspnode-01-p        vcenter_name=v-vcenter-03-p.mavir.local
+v-gpfspnode-03-p        vcenter_name=v-vcenter-03-p.mavir.local
+v-sonarqube-01-p        vcenter_name=v-vcenter-03-p.mavir.local
+
+[IRODA_PROD_Linux_Stage2]
+v-microsec-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-intranet-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-pmaapp-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-odsapp-04-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-rtdwapp-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-confluence-02-p       vcenter_name=v-vcenter-03-p.mavir.local
+v-confluence-04-p       vcenter_name=v-vcenter-03-p.mavir.local
+v-katiapp-02-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-mekapp-04-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-ecpemfip-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpbspcd-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-ecpbspep-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-vtapp-02-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-vtweb-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-jira-02-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-jira-04-p		vcenter_name=v-vcenter-03-p.mavir.local
+v-soaapp-01-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-soaapp-02-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-soa-01-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-soa-02-p		vcenter_name=v-vcenter-04-p.mavir.local
+v-gpfspnode-02-p        vcenter_name=v-vcenter-03-p.mavir.local
+
+
+[Egyedi]
+v-mekweb-05-t           vcenter_name=v-vcenter-03-p.mavir.local
+v-mekweb-06-t           vcenter_name=v-vcenter-03-p.mavir.local
+
+inventory = ./inventory
+roles_path = /home/faczan/ansible/roles:/usr/share/ansible/roles/
+ask_pass = no
+remote_user = junkertf
+host_key_checking = false
+timeout=40
+
+[privilege_escalation]
+become = yes
+become_method = sudo
+become_user = root
+become_ask_pass = no
+
