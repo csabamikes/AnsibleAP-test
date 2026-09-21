@@ -4,6 +4,10 @@
   gather_facts: false
   become: true
 
+  # Ez a környezeti változó kikapcsolja a known_hosts ellenőrzést a play futása alatt
+  environment:
+    ANSIBLE_HOST_KEY_CHECKING: "False"
+
   vars:
     ssh_user: "mcs"
     ssh_password_raw: "root123"
