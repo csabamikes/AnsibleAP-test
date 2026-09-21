@@ -4,6 +4,11 @@
   gather_facts: false
   become: true  # Root jog szükséges a felhasználó kulcsának módosításához
 
+  # Ez a környezeti változó kikapcsolja a known_hosts ellenőrzést a play futása alatt
+  environment:
+    ANSIBLE_HOST_KEY_CHECKING: "False"
+
+
   vars:
     ssh_user: "mcs"
     # Itt adjuk meg a tiszta szöveges jelszót
