@@ -6,13 +6,16 @@
 
   vars:
     ssh_user: "mcs"
-    # Itt add meg a nyilvános kulcsot (vagy használhatsz lookup plugint is)
+    # A "root123" jelszó SHA-512-es hash formátuma salt-tal
+    ssh_password: "$6$rounds=656000$randomsalt12345$5Xh.uV4kC8sMms96Fv3y27G0bM73oR0K0N5Sndd5rDbaG5lF713g6B5gC9.U7m8z6/1YhG4Ie/XpWzS/P1f80/"
+    # Itt add meg a nyilvános kulcsot
     public_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDhXnwfOYukkPIWtiqtfL4Hwdlb2rumq/6zQUqrqU32obNBX90ILOo8jx9I6xdCIs7N0uNKDRWR8ZTO6ve1H1j9V8JcXZse9zbZVSi1RpmQMAQg769o+dmhJuE9122sAQunR/IHkIO3bMaSCKZUxlP6hogG06x1SZhrEoY0fVSzPVNYe+bqKZj1wDr1G+wIQkGUKpkj1N0C8EbKrltIMozlYkh4wZOXiK/bvgcEUGRP2PUvQ53AHA9zwlaqysSsd5aMmJv+4MM3HOhhbIroUC4731G4mFJdqSlv4CrDDN5eixcjwiTcZXlqJ54IO7iQLusit6gF6Yma0TswJdO21/nTtXLEzD7IW5FisqGaV9Qr/0Z/UzEpvVZT1qPYxjHQ9rdfhKXu7sphwZ3lLp6iR7+I9kw/oB33V2ylnURzuGDTEopvMgZOtPvVFQZsaKx1/ZRC+NSR3kHk3bLX2dY+LtiNG1+xVPv8b06fzJZ4HIEFVtgmGJOiDSzNypxi8YTnCo8= mcs@rhel9-02.example.com"
 
   tasks:
-    - name: Ellenőrizzük, hogy létezik-e az ansible felhasználó
+    - name: Ellenőrizzük, hogy létezik-e a megadott felhasználó (ha nem létezik, akkor létrehozzuk) és beállítjuk a jelszavát
       ansible.builtin.user:
         name: "{{ ssh_user }}"
+        password: "{{ ssh_password }}"
         state: present
         shell: /bin/bash
 
