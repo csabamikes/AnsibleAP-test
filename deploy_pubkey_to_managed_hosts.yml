@@ -13,7 +13,7 @@
     # -------------------------------------------------------------------------
     # TÁVOLI GÉPEK BEÁLLÍTÁSA (Managed Hosts)
     # -------------------------------------------------------------------------
-    - name: Ellenőrizzük, hogy létezik-e az mcs felhasználó a célgépeken
+    - name: Ellenőrizzük, hogy létezik-e a megadott felhasználó a célgépeken
       ansible.builtin.user:
         name: "{{ ssh_user }}"
         password: "{{ ssh_password_raw | password_hash('sha512') }}"
@@ -25,42 +25,3 @@
         user: "{{ ssh_user }}"
         state: present
         key: "{{ public_key }}"
-
-    # -------------------------------------------------------------------------
-    # AAP (VEZÉRLŐ) GÉP HELYI BEÁLLÍTÁSA (Localhost)
-    # -------------------------------------------------------------------------
-    - name: Ellenőrizzük, hogy az AAP host-on is létezik-e az mcs felhasználó
-      delegate_to: localhost
-      run_once: true
-      ansible.builtin.user:
-        name: "{{ ssh_user }}"
-        password: "{{ ssh_password_raw | password_hash('sha512') }}"
-        state: present
-        shell: /bin/bash
-
-    - name: Ellenőrizzük, hogy az AAP host mcs felhasználójának létezik-e az .ssh mappája
-      delegate_to: localhost
-      run_once: true
-      ansible.builtin.file:
-        path: "~{{ ssh_user }}/.ssh"
-        state: directory
-        owner: "{{ ssh_user }}"
-        group: "{{ ssh_user }}"
-        mode: '0700'
-
-    - name: Kizárólag az inventory-ban lévő gépekre kapcsoljuk ki a Host Key Checking-et az AAP-n
-      delegate_to: localhost
-      run_once: true
-      ansible.builtin.blockinfile:
-        path: "~{{ ssh_user }}/.ssh/config"
-        create: true
-        owner: "{{ ssh_user }}"
-        group: "{{ ssh_user }}"
-        mode: '0600'
-        block: |
-          {% for host in ansible_play_hosts %}
-          Host {{ host }}
-              StrictHostKeyChecking no
-              UserKnownHostsFile /dev/null
-
-          {% endfor %}
