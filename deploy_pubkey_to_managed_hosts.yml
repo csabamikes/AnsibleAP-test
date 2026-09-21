@@ -1,32 +1,59 @@
 ---
-- name: SSH publikus kulcs szétterítése a célgépekre
+- name: SSH publikus kulcs szétterítése és SSH kliens konfigurálása
   hosts: all
   gather_facts: false
-  become: true  # Root jog szükséges a felhasználó kulcsának módosításához
-
-  # Ez a környezeti változó kikapcsolja a known_hosts ellenőrzést a play futása alatt
-  environment:
-    ANSIBLE_HOST_KEY_CHECKING: "False"
-
+  become: true
 
   vars:
     ssh_user: "mcs"
-    # Itt adjuk meg a tiszta szöveges jelszót
     ssh_password_raw: "root123"
-    # Itt add meg a nyilvános kulcsot
     public_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDhXnwfOYukkPIWtiqtfL4Hwdlb2rumq/6zQUqrqU32obNBX90ILOo8jx9I6xdCIs7N0uNKDRWR8ZTO6ve1H1j9V8JcXZse9zbZVSi1RpmQMAQg769o+dmhJuE9122sAQunR/IHkIO3bMaSCKZUxlP6hogG06x1SZhrEoY0fVSzPVNYe+bqKZj1wDr1G+wIQkGUKpkj1N0C8EbKrltIMozlYkh4wZOXiK/bvgcEUGRP2PUvQ53AHA9zwlaqysSsd5aMmJv+4MM3HOhhbIroUC4731G4mFJdqSlv4CrDDN5eixcjwiTcZXlqJ54IO7iQLusit6gF6Yma0TswJdO21/nTtXLEzD7IW5FisqGaV9Qr/0Z/UzEpvVZT1qPYxjHQ9rdfhKXu7sphwZ3lLp6iR7+I9kw/oB33V2ylnURzuGDTEopvMgZOtPvVFQZsaKx1/ZRC+NSR3kHk3bLX2dY+LtiNG1+xVPv8b06fzJZ4HIEFVtgmGJOiDSzNypxi8YTnCo8= mcs@://example.com"
 
   tasks:
-    - name: Ellenőrizzük, hogy létezik-e az mcs felhasználó és dinamikusan hasheljük a jelszót
+    # -------------------------------------------------------------------------
+    # TÁVOLI GÉPEK BEÁLLÍTÁSA (Managed Hosts)
+    # -------------------------------------------------------------------------
+    - name: Ellenőrizzük, hogy létezik-e az mcs felhasználó a célgépeken
       ansible.builtin.user:
         name: "{{ ssh_user }}"
-        # A password_hash szűrő a háttérben biztonságos SHA-512 hasht készít egyedi salttal
         password: "{{ ssh_password_raw | password_hash('sha512') }}"
         state: present
         shell: /bin/bash
 
-    - name: SSH kulcs hozzáadása az authorized_keys fájlhoz
+    - name: SSH kulcs hozzáadása az authorized_keys fájlhoz a célgépeken
       ansible.posix.authorized_key:
         user: "{{ ssh_user }}"
         state: present
         key: "{{ public_key }}"
+
+    # -------------------------------------------------------------------------
+    # AAP (VEZÉRLŐ) GÉP HELYI BEÁLLÍTÁSA (Localhost)
+    # -------------------------------------------------------------------------
+    - name: Ellenőrizzük, hogy az AAP host mcs felhasználójának létezik-e az .ssh mappája
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.file:
+        path: "~{{ ssh_user }}/.ssh"
+        state: directory
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: '0700'
+
+    - name: Kizárólag az inventory-ban lévő gépekre kapcsoljuk ki a Host Key Checking-et az AAP-n
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.blockinfile:
+        path: "~{{ ssh_user }}/.ssh/config"
+        create: true
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: '0600'
+        # A Jinja2 ciklus végigmegy az összes most megcélzott szerver nevén
+        block: |
+          {% for host in ansible_play_hosts %}
+          Host {{ host }}
+              StrictHostKeyChecking no
+              UserKnownHostsFile /dev/null
+
+          {% endfor %}
+
