@@ -7,7 +7,7 @@
   vars:
     ssh_user: "mcs"
     ssh_password_raw: "root123"
-    public_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDhXnwfOYukkPIWtiqtfL4Hwdlb2rumq/6zQUqrqU32obNBX90ILOo8jx9I6xdCIs7N0uNKDRWR8ZTO6ve1H1j9V8JcXZse9zbZVSi1RpmQMAQg769o+dmhJuE9122sAQunR/IHkIO3bMaSCKZUxlP6hogG06x1SZhrEoY0fVSzPVNYe+bqKZj1wDr1G+wIQkGUKpkj1N0C8EbKrltIMozlYkh4wZOXiK/bvgcEUGRP2PUvQ53AHA9zwlaqysSsd5aMmJv+4MM3HOhhbIroUC4731G4mFJdqSlv4CrDDN5eixcjwiTcZXlqJ54IO7iQLusit6gF6Yma0TswJdO21/nTtXLEzD7IW5FisqGaV9Qr/0Z/UzEpvVZT1qPYxjHQ9rdfhKXu7sphwZ3lLp6iR7+I9kw/oB33V2ylnURzuGDTEopvMgZOtPvVFQZsaKx1/ZRC+NSR3kHk3bLX2dY+LtiNG1+xVPv8b06fzJZ4HIEFVtgmGJOiDSzNypxi8YTnCo8= mcs@://example.com"
+    public_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDhXnwfOYukkPIWtiqtfL4Hwdlb2rumq/6zQUqrqU32obNBX90ILOo8jx9I6xdCIs7N0uNKDRWR8ZTO6ve1H1j9V8JcXZse9zbZVSi1RpmQMAQg769o+dmhJuE9122sAQunR/IHkIO3bMaSCKZUxlP6hogG06x1SZhrEoY0fVSzPVNYe+bqKZj1wDr1G+wIQkGUKpkj1N0C8EbKrltIMozlYkh4wZOXiK/bvgcEUGRP2PUvQ53AHA9zwlaqysSsd5aMmJv+4MM3HOhhbIroUC4731G4mFJdqSlv4CrDDN5eixcjwiTcZXlqJ54IO7iQLusit6gF6Yma0TswJdO21/nTtXLEzD7IW5FisqGaV9Qr/0Z/UzEpvVZT1qPYxjHQ9rdfhKXu7sphwZ3lLp6iR7+I9kw/oB33V2ylnURzuGDTEopvMgZOtPvVFQZsaKx1/ZRC+NSR3kHk3bLX2dY+LtiNG1+xVPv8b06fzJZ4HIEFVtgmGJOiDSzNypxi8YTnCo8= mcs@rhel9-02.example.com"
 
   tasks:
     # -------------------------------------------------------------------------
@@ -29,6 +29,15 @@
     # -------------------------------------------------------------------------
     # AAP (VEZÉRLŐ) GÉP HELYI BEÁLLÍTÁSA (Localhost)
     # -------------------------------------------------------------------------
+    - name: Ellenőrizzük, hogy az AAP host-on is létezik-e az mcs felhasználó
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.user:
+        name: "{{ ssh_user }}"
+        password: "{{ ssh_password_raw | password_hash('sha512') }}"
+        state: present
+        shell: /bin/bash
+
     - name: Ellenőrizzük, hogy az AAP host mcs felhasználójának létezik-e az .ssh mappája
       delegate_to: localhost
       run_once: true
@@ -48,7 +57,6 @@
         owner: "{{ ssh_user }}"
         group: "{{ ssh_user }}"
         mode: '0600'
-        # A Jinja2 ciklus végigmegy az összes most megcélzott szerver nevén
         block: |
           {% for host in ansible_play_hosts %}
           Host {{ host }}
@@ -56,4 +64,3 @@
               UserKnownHostsFile /dev/null
 
           {% endfor %}
-
