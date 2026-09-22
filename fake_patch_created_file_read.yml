@@ -19,10 +19,8 @@
     - name: A kiolvasott tartalom megjelenítése
       ansible.builtin.debug:
         msg: |
-          A(z) {{ inventory_hostname }} host patchelve. Patch Info:
-          ----------------------------------------
-          {{ slurped_file['content'] | b64decode }}
-          ----------------------------------------
+          A(z) {{ inventory_hostname }} host patchelve. 
+          Patch Info: {{ slurped_file['content'] | b64decode }} 
       when: file_stat.stat.exists
 
     - name: Értesítés küldése, ha a fájl nem létezik
