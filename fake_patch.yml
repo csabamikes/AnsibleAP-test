@@ -13,4 +13,5 @@
           Létrehozás dátuma: {{ ansible_date_time.date }} {{ ansible_date_time.time }}
           Managed host neve: {{ ansible_hostname }}
           Managed host IP címe: {{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0]) }}
+          "Patch kész"
         mode: '0644'
