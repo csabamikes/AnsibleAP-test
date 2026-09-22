@@ -1,0 +1,16 @@
+---
+- name: Rendszerinformációk kiírása egy fájlba
+  hosts: all
+  gather_facts: yes
+  vars:
+    target_file_path: "/tmp/host_info.txt"
+
+  tasks:
+    - name: Fájl létrehozása és feltöltése az adatokkal
+      ansible.builtin.copy:
+        dest: "{{ target_file_path }}"
+        content: |
+          Létrehozás dátuma: {{ ansible_date_time.date }} {{ ansible_date_time.time }}
+          Managed host neve: {{ ansible_hostname }}
+          Managed host IP címe: {{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0]) }}
+        mode: '0644'
