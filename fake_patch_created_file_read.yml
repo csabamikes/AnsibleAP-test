@@ -1,0 +1,31 @@
+- name: Fájl ellenőrzése és tartalmának kiolvasása
+  hosts: all
+  gather_facts: no
+  vars:
+    target_file_path: "/tmp/host_info.txt"
+
+  tasks:
+    - name: Fájl létezésének ellenőrzése
+      ansible.builtin.stat:
+        path: "{{ target_file_path }}"
+      register: file_stat
+
+    - name: Fájl tartalmának beolvasása (csak ha a fájl létezik)
+      ansible.builtin.slurp:
+        src: "{{ target_file_path }}"
+      register: slurped_file
+      when: file_stat.stat.exists
+
+    - name: A kiolvasott tartalom megjelenítése
+      ansible.builtin.debug:
+        msg: |
+          A(z) {{ inventory_hostname }} host patchelve. Patch Info:
+          ----------------------------------------
+          {{ slurped_file['content'] | b64decode }}
+          ----------------------------------------
+      when: file_stat.stat.exists
+
+    - name: Értesítés küldése, ha a fájl nem létezik
+      ansible.builtin.debug:
+        msg: "FIGYELMEZTETÉS: A(z) {{ inventory_hostname }} host nincs patchelve!"
+      when: not file_stat.stat.exists
