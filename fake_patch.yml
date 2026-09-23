@@ -15,3 +15,8 @@
           Managed host IP címe: {{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0]) }}
           "Patch kész"
         mode: '0644'
+
+    #- name: Megadott fájl törlése
+    #  ansible.builtin.file:
+    #    path: "{{ target_file_path }}"
+    #    state: absent
